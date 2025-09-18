@@ -1,7 +1,7 @@
 #include <unistd.h>
 #define CMAX 300
 
-int main(void) {
+int main(int argc, char *argv[]) {
     char buffer[CMAX], c; 
     int i, n;
 
