@@ -13,6 +13,10 @@ int main(int argc, char *argv[]) {
             buffer[i++] = c;
             n = read(0, &c, 1);
         }
+        // TEST for different cases
+        // if only enter is pressed
+        // if max characters are entered
+        // if more than max characters are entered
         write(1, buffer, i);        
         write(1, "\n", 1);  
     }
