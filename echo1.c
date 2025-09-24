@@ -1,3 +1,10 @@
+/**
+ * Purpose: This program reads user input from the keyboard and echos it back
+ *          to the screen.
+ * 
+ * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
+ */
+
 #include <unistd.h>
 #define CMAX 300
 
