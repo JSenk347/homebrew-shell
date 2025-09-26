@@ -40,7 +40,7 @@ void prompt_echo() {
 
         //check for "exit"
         if (i == 4 && (buffer[0] == 'e' || buffer[0] == 'E') && buffer[1] == 'x' && buffer[2] == 'i' && buffer[3] == 't'){
-            return;
+            _exit(0);
         }
         
         write(1, buffer, i);        
