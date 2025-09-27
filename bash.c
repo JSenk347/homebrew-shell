@@ -37,7 +37,7 @@ void prompt_echo() {
          *(fd = 0) into c (&c)*/
         n = read(0, &c, 1);
         
-                             while (n > 0 && c != '\n' && i < MAX_TOKENS - 1) {
+        while (n > 0 && c != '\n' && i < MAX_TOKENS - 1) {
             buffer[i++] = c;
             n = read(0, &c, 1);
         }
