@@ -1,7 +1,7 @@
 #ifndef JOBS_H
 #define JOBS_H
 
-#define MAX_ARGS 0     /* TO DO */
+#define MAX_ARGS 10     //allows 10 arguments
 
 struct Command
 {
@@ -9,4 +9,5 @@ struct Command
   unsigned int argc;
 };
 
+typedef struct Command Command;
 #endif
