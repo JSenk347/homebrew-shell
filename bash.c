@@ -62,7 +62,10 @@ void prompt_echo() {
             return;
         }
         
+        //echo input back to screen
         write(1, buffer, i);        
-        if (i > 0){write(1, "\n", 1);}
+        if (i > 0){
+            write(1, "\n", 1);
+        }
     }
 }
