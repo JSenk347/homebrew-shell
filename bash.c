@@ -32,14 +32,33 @@ void prompt_echo() {
     while (1) {
         write(1, "$ ", 2);
         i = 0;
-        n = read(0, &c, 1); //reads specified number of characters (1) from the input stream (fd = 0) into c (&c)
-        while (n > 0 && c != '\n' && i < MAX_TOKENS - 1) {
+
+        /**reads specified number of characters (1) from the input stream
+         *(fd = 0) into c (&c)*/
+        n = read(0, &c, 1);
+        
+                             while (n > 0 && c != '\n' && i < MAX_TOKENS - 1) {
             buffer[i++] = c;
             n = read(0, &c, 1);
         }
 
+        //check for input exceeding max char limit
+        if (c != '\n') {
+            // error message
+            write(1, "Error: input exceeds max char limit\n", 37);
+
+            //clear input until newline
+            while (n > 0 && c != '\n') {
+                n = read(0, &c, 1);
+            }
+
+            //skips the rest of the loop and starts over
+            continue;
+        }
+
         //check for "exit"
-        if (i == 4 && (buffer[0] == 'e' || buffer[0] == 'E') && buffer[1] == 'x' && buffer[2] == 'i' && buffer[3] == 't'){
+        if (i == 4 && (buffer[0] == 'e' || buffer[0] == 'E') && buffer[1] == 'x'
+            && buffer[2] == 'i' && buffer[3] == 't') {
             return;
         }
         
