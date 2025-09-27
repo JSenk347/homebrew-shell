@@ -10,8 +10,12 @@
 #include "mystring.h"
 #include "jobs.h"
 #include <unistd.h>
+#include <stdio.h>
 
 #define MAX_TOKENS 300
+#define MAX_ARGS 10
+char buffer[MAX_TOKENS]; // Global Buffer
+
 
 //Structures
 struct Command cmd;
@@ -20,14 +24,14 @@ struct Command cmd;
 void get_command(Command *cmd);
 void read_input(char *buffer, int *input_length);
 int check_exit(char *buffer, int *input_length);
-void find_arg(char *buffer, int *input_length, Command *cmd);
+void tokenize(char *buffer, int *input_length, Command *cmd);
 
 
 int main(int argc, char *argv[], char *envp[])
 {
   int exitShell = 0;
   int input_length = 0;
-  char buffer[MAX_TOKENS];
+  //char buffer[MAX_TOKENS];
   
   get_command(&cmd);  
 
@@ -60,17 +64,15 @@ int main(int argc, char *argv[], char *envp[])
  * @param cmd A pointer to a Command structure to store the parsed command.
  */
 void get_command(Command *cmd) {
-  char buffer[MAX_TOKENS];
+  //char buffer[MAX_TOKENS];
   int input_length = 0;
 
   write(1, "$ ", 2); //prompt
-  read_input(buffer, &input_length); //read command line into buffer
+  read_input(/*buffer, */&input_length); //read command line into buffer
 
-  /* still need to build this fuction but it will go here 
-  free_all(); //free memory from previous command
-  */
-
-  find_arg(buffer, &input_length, &cmd); //parse input into arguments
+  tokenize(/*buffer,*/ &input_length, cmd); //parse input into arguments
+  free_all();
+  printf(cmd->argv[0]);
 
   return;
 }
@@ -81,9 +83,9 @@ void get_command(Command *cmd) {
  *          from the keyboard into the buffer.
  * 
  * @param buffer A character array to store the user input.
- * @param input_length A pointer to an integer to store the length of the input.
+ * @param input_length A pointer to an integer to store the length of the input string.
  */
-void read_input(char *buffer, int *input_length) {
+void read_input(/*char *buffer, */int *input_length) {
   char c;
   int i = 0;
   int n;
@@ -120,35 +122,46 @@ void read_input(char *buffer, int *input_length) {
  * @param buffer A character array containing the user input.
  * @param input_length A pointer to an integer representing the length of the input.
  */
-void find_arg(char *buffer, int *input_length, Command *cmd) {
+void tokenize(/*char *buffer,*/ int *input_length, Command *cmd) {
   // TO DO: parse the input buffer into arguments
   int start = 0;
-  int end;
+  int end = 0;
+  int token_length;
 
-  //find the first char that is not a space or tab
+  // Skip over white space
   while (start < *input_length && (buffer[start] == ' ' || buffer[start] == '\t')) {
     start++;
   }
-
   //set input_length to 0 if input is all spaces or tabs
   if (start >= *input_length) {
-    *input_length = 0; // No arguments found
+    *input_length = 0; // No arguments
+    cmd->argv[0] = NULL;
     return;
   }
 
-  //find the next space or tab char
-  end = start;
-  while (end < *input_length) {
-    if (buffer[end] == ' ' || buffer[end] == '\t') {
-      break;
+  // loop for 
+  while(start < *input_length){
+    //find the next space or tab char
+    end = start;
+    while (end < *input_length && buffer[end] == ' ' || buffer[end] == '\t') {
+      end++;
     }
-    end++;
+
+    token_length = end - start;
+    if (token_length > 0){  
+      if (cmd->argc < MAX_ARGS){
+        char *token = alloc(token_length+1);
+        for(int i = 0; i<token_length; i++){
+
+        }
+        token[token_length] = '\0';
+
+      }
+
+    }
   }
-
-
+  len = end - start;
   cmd->argv[0] = &buffer[start]; //set first argument to start of buffer
-
-
 
   return;
 }

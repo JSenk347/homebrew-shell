@@ -8,7 +8,7 @@
 static char heap[HEAP_SIZE]; //Big 'Ol healp
 static char *freep = heap; //Pointer to next available chunk of memory on the heap
 
-
+/*size is the number of cahracters to put on the buffer*/
 char *alloc(unsigned int size)
 {
   if (size == 0 || freep + size > heap + HEAP_SIZE){
