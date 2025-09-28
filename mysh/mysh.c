@@ -18,8 +18,8 @@
 #define MAX_ARGS 10
 char buffer[MAX_TOKENS]; // Global Buffer
 static void print_command(const Command *cmd);
-extern char **environ;
-void run_command(const Command *cmd);
+
+
 
 
 //Structures
@@ -30,20 +30,21 @@ void get_command(Command *cmd);
 void read_input(/*char *buffer, */int *input_length);
 int check_exit(char *buffer, int *input_length);
 void tokenize(/*char *buffer,*/ int *input_length, Command *cmd);
+void run_command(const Command *cmd, char *envp[]);
 
 
-int main(int argc, char *argv[], char *envp[])
+/*int main(int argc, char *argv[], char *envp[])
 {
   int exitShell = 0;
   int input_length = 0;
   //char buffer[MAX_TOKENS];
   
   get_command(&cmd);  
-  run_command(&cmd); 
-  return 0;
+  run_command(&cmd, envp); 
+  
   while (!exitShell)
     {
-      /* TO DO: process command line */
+      // TO DO: process command line 
       //this is where the parent child process stuff will go
 
       if (!exitShell) {
@@ -61,6 +62,14 @@ int main(int argc, char *argv[], char *envp[])
     }
   
   return 0;
+} */
+
+int main(int argc, char *argv[], char *envp[]) {
+    while (1) {
+        get_command(&cmd);
+        run_command(&cmd, envp);
+    }
+    return 0;
 }
 
 /**
@@ -75,7 +84,7 @@ void get_command(Command *cmd) {
 
   write(1, "$ ", 2); //prompt
   read_input(/*buffer, */&input_length); //read command line into buffer
-
+  free_all(); 
   tokenize(/*buffer,*/ &input_length, cmd); //parse input into arguments
   free_all();
   
@@ -116,7 +125,7 @@ void read_input(/*char *buffer, */int *input_length) {
 
     //skips the rest of the loop and starts over
   }*/ 
-
+  buffer[i] = '\0';
   *input_length = i;
   return;
 }
@@ -133,6 +142,7 @@ void tokenize(/*char *buffer,*/ int *input_length, Command *cmd) {
   int start = 0;
   int end = 0;
   int token_length;
+  cmd->argc = 0;
 
   // Skip over white space
   while (start < *input_length && (buffer[start] == ' ' || buffer[start] == '\t')) {
@@ -191,7 +201,7 @@ void tokenize(/*char *buffer,*/ int *input_length, Command *cmd) {
  * @param input_length A pointer to an integer representing the length of the input.
  * 
  * @return int Returns 1 if the input is "exit", otherwise returns 0.
- */
+ 
 int check_exit(char *buffer, int *input_length) {
   if (*input_length == 4 && (buffer[0] == 'e' || buffer[0] == 'E') &&
     (buffer[1] == 'x' || buffer[1] == 'X') &&
@@ -202,6 +212,7 @@ int check_exit(char *buffer, int *input_length) {
 
   return 0;
 }
+ */
 
 static void print_command(const Command *cmd) {
     printf("argc=%d\n", cmd->argc);
@@ -210,9 +221,35 @@ static void print_command(const Command *cmd) {
     }
 }
 
-void run_command(const Command *cmd) {
-    if (cmd->argc == 0) return;             // nothing to run
+/**
+ * @brief Execute a command by forking to createa child and running execve.
+ *
+ * @param cmd  Parsed command structure (argv/argc).
+ * @param envp Environment passed down from main.
+ */
+void run_command(const Command *cmd, char *envp[]) {
+    if (cmd->argc == 0) return;             // no commands were sent
+
+    // exit
+    if (mystrcmp(cmd->argv[0], "exit") == 0) {
+      _exit(0);
+    } 
 
     pid_t pid = fork();
- 
+    if (pid < 0) {
+      //error 
+      write(2, "fork failed\n", 12);
+      _exit(0);
+    }
+
+    if (pid == 0) {   // Child doing some work
+      execve(cmd->argv[0], cmd->argv, envp);  
+
+      // error
+      write(2, "execve failed\n", 14);     
+      _exit(0);           
+    }
+    // stop parent from working until the child is gone
+    int status;
+    waitpid(pid, &status, 0);
 }
