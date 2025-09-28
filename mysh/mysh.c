@@ -9,12 +9,17 @@
 
 #include "mystring.h"
 #include "jobs.h"
-#include <unistd.h>
+#include "myheap.h"
 #include <stdio.h>
-
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #define MAX_TOKENS 300
 #define MAX_ARGS 10
 char buffer[MAX_TOKENS]; // Global Buffer
+static void print_command(const Command *cmd);
+extern char **environ;
+void run_command(const Command *cmd);
 
 
 //Structures
@@ -22,9 +27,9 @@ struct Command cmd;
 
 //Function prototypes
 void get_command(Command *cmd);
-void read_input(char *buffer, int *input_length);
+void read_input(/*char *buffer, */int *input_length);
 int check_exit(char *buffer, int *input_length);
-void tokenize(char *buffer, int *input_length, Command *cmd);
+void tokenize(/*char *buffer,*/ int *input_length, Command *cmd);
 
 
 int main(int argc, char *argv[], char *envp[])
@@ -34,7 +39,8 @@ int main(int argc, char *argv[], char *envp[])
   //char buffer[MAX_TOKENS];
   
   get_command(&cmd);  
-
+  run_command(&cmd); 
+  return 0;
   while (!exitShell)
     {
       /* TO DO: process command line */
@@ -72,7 +78,7 @@ void get_command(Command *cmd) {
 
   tokenize(/*buffer,*/ &input_length, cmd); //parse input into arguments
   free_all();
-  printf(cmd->argv[0]);
+  
 
   return;
 }
@@ -143,8 +149,8 @@ void tokenize(/*char *buffer,*/ int *input_length, Command *cmd) {
   while(start < *input_length){
     //find the next space or tab char
     end = start;
-    while (end < *input_length && buffer[end] == ' ' || buffer[end] == '\t') {
-      end++;
+    while (end < *input_length && buffer[end] != ' ' && buffer[end] != '\t') {
+    end++;
     }
 
     token_length = end - start;
@@ -152,16 +158,27 @@ void tokenize(/*char *buffer,*/ int *input_length, Command *cmd) {
       if (cmd->argc < MAX_ARGS){
         char *token = alloc(token_length+1);
         for(int i = 0; i<token_length; i++){
-
+            token[i] = buffer[start + i];
         }
         token[token_length] = '\0';
-
+        cmd->argv[cmd->argc++] = token;
       }
-
+      else{
+        write(2, "Too many args\n", 14);
+        break;
+      }
     }
+      // Advance past this token
+        start = end;
+
+        
+      while (start < *input_length && (buffer[start] == ' ' || buffer[start] == '\t')) {
+          start++;
+      
+      }
   }
-  len = end - start;
-  cmd->argv[0] = &buffer[start]; //set first argument to start of buffer
+  
+  cmd->argv[cmd->argc] = NULL;
 
   return;
 }
@@ -184,4 +201,18 @@ int check_exit(char *buffer, int *input_length) {
   }
 
   return 0;
+}
+
+static void print_command(const Command *cmd) {
+    printf("argc=%d\n", cmd->argc);
+    for (int i = 0; i < cmd->argc; i++) {
+        printf("argv[%d] = \"%s\"\n", i, cmd->argv[i]);
+    }
+}
+
+void run_command(const Command *cmd) {
+    if (cmd->argc == 0) return;             // nothing to run
+
+    pid_t pid = fork();
+ 
 }

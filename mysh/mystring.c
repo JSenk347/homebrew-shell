@@ -5,7 +5,7 @@
 unsigned int mystrlen(const char *s)
 {
   int i = 0;
-  while (s[i] != ('\n' || '\0')){
+  while (s[i] != ('\0')){
     i++;
   }
   return i;     
@@ -34,11 +34,11 @@ char *mystrcpy(char *dest, const char *src)
   return orig_dest;
 }
 
-int main(){
+/**int main(){
   char s1[100] = "hello there";
   char s2[100] = "how are you?";
 
   printf("String Length: %u\n", mystrlen(s1));
   printf("String Comp: %i\n", mystrcmp(s1, s2));
   printf("Copied String: %s\n", mystrcpy(s1, s2));
-}
+} **/
