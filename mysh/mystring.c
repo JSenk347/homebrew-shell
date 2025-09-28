@@ -31,6 +31,7 @@ char *mystrcpy(const char *src, char *dest)
   *dest = '\0';
   return orig_dest;
 }
+
 //For testing
 /*
 int main(){
