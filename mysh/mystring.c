@@ -5,7 +5,7 @@
  *    strcpy.
  * 
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
- * file: mystring.c
+ * @file: mystring.c
  */
 
 #include "mystring.h"

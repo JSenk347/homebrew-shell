@@ -2,7 +2,7 @@
  * Summary: Header file for custom string manipulation functions.
  * 
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
- * file: mystring.h
+ * @file: mystring.h
  */
 
 #ifndef MY_STRING_H

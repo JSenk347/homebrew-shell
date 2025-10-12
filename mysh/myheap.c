@@ -5,7 +5,7 @@
  *    free_all functions.
  * 
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
- * file: myheap.c
+ * @file: myheap.c
  */
 
 #include <unistd.h>

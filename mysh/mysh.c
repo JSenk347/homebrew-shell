@@ -4,7 +4,7 @@
  * Current functionality: Runs the shell loop.
  * 
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
- * file: mysh.c
+ * @file: mysh.c
  */
 
 #include "mystring.h"

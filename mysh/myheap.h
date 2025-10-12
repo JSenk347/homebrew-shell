@@ -2,7 +2,7 @@
  * Summary: Header file for myheap.c
  * 
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
- * file: myheap.h
+ * @file: myheap.h
  */
 
 #ifndef MY_HEAP_H

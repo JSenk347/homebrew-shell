@@ -1,3 +1,10 @@
+/**
+ * Summary: @todo
+ * 
+ * @authors Anna Running Rabbit, Joseph Mills, Jordan Senko
+ * @file jobs.h
+ */
+
 #ifndef JOBS_H
 #define JOBS_H
 
