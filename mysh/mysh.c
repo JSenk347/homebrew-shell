@@ -214,6 +214,12 @@ int check_exit(char *buffer, int *input_length) {
 }
  */
 
+ /**
+  * @brief This function prints the contents of a Command structure for
+  *        debugging purposes.
+  * 
+  * @param cmd A pointer to the Command structure to print
+  */
 static void print_command(const Command *cmd) {
     printf("argc=%d\n", cmd->argc);
     for (int i = 0; i < cmd->argc; i++) {
@@ -222,7 +228,7 @@ static void print_command(const Command *cmd) {
 }
 
 /**
- * @brief Execute a command by forking to createa child and running execve.
+ * @brief Execute a command by forking to create a child and running execve.
  *
  * @param cmd  Parsed command structure (argv/argc).
  * @param envp Environment passed down from main.
