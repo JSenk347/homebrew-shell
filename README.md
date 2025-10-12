@@ -4,7 +4,7 @@ A shell project designed for a Linux system, produced as a project for MRU's COM
 # Authors:
     Anna Running Rabbit, Jordan Senko, Joseph Mills
 
-## Usage
+# Usage
 - To clean all: make clean
 - To make/compile all: make all
 - To run: ./mysh
