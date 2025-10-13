@@ -27,15 +27,15 @@ struct Command cmd;
 void get_command(Command *cmd);
 void read_input(/*char *buffer, */ int *input_length);
 void tokenize(/*char *buffer,*/ int *input_length, Command *cmd);
-void find_start(int *start, int *input_length); /** trying this out - ARR */
-int isExit(const Command *cmd); /** trying this out - ARR */
+void find_start(int *start, int *input_length);             /** trying this out - ARR */
+void find_tkn_end(int *start, int *end, int *input_length); /** trying this our - ARR */
+int isExit(const Command *cmd);                             /** trying this out - ARR */
 void run_command(const Command *cmd, char *envp[]);
-//int check_exit(char *buffer, int *input_length); not in use - ARR
-
+// int check_exit(char *buffer, int *input_length); not in use - ARR
 
 int main(int argc, char *argv[], char *envp[])
 {
-  get_command(&cmd); // added to match week 04 guidance template - ARR
+  get_command(&cmd);               // added to match week 04 guidance template - ARR
   while (/**1*/ isExit(&cmd) == 0) // changed to match week 04 guidance template - ARR
   {
     /**get_command(&cmd); modified to match week 04 guidance template - ARR */
@@ -44,7 +44,6 @@ int main(int argc, char *argv[], char *envp[])
   }
   return 0;
 }
-
 
 // HELPER FUNCTIONS
 /**
@@ -115,13 +114,14 @@ void read_input(/*char *buffer, */ int *input_length)
  */
 void tokenize(/*char *buffer,*/ int *input_length, Command *cmd)
 {
-  // TO DO: parse the input buffer into arguments
   int start = 0;
   int end = 0;
   int token_length;
   cmd->argc = 0;
+  int *start_ptr = &start;
+  int *end_ptr = &end;
 
-  find_start(&start, input_length); /** trying this out - ARR */
+  find_start(start_ptr, input_length); /** trying this out - ARR */
   /** turn this into it's own helper function find_start(int *start, int *input_length) ? - ARR
   // Skip over white space
   while (start < *input_length && (buffer[start] == ' ' || buffer[start] == '\t'))
@@ -136,15 +136,17 @@ void tokenize(/*char *buffer,*/ int *input_length, Command *cmd)
     return;
   }
 
-  // loop for
+  // Main tokenizing loop
   while (start < *input_length)
   {
     // find the next space or tab char
+    find_tkn_end(start_ptr, end_ptr, input_length); /** trying this out - ARR */
+    /** turn this into it's own helper function find_tkn_end(int *start, int *end, int *input_length) ? - ARR
     end = start;
     while (end < *input_length && buffer[end] != ' ' && buffer[end] != '\t')
     {
       end++;
-    }
+    } */
 
     token_length = end - start;
     if (token_length > 0)
@@ -181,26 +183,45 @@ void tokenize(/*char *buffer,*/ int *input_length, Command *cmd)
 
 /**
  * @brief Skip over initial white space until a non-white space char is found.
- * 
+ *
  * @param start Pointer to the starting index to modify.
  * @param input_length The total length of the input buffer.
  */
-void find_start(int *start, int *input_length) {
+void find_start(int *start, int *input_length)
+{
   while (*start < *input_length && (buffer[*start] == ' ' || buffer[*start] == '\t'))
   {
-    *start++;
+    (*start)++;
+  }
+}
+
+/**
+ * @brief Find the end index of the current token by searching for the next
+ *        white space character or the end of the input.
+ *
+ * @param start Pointer to the starting index of the token.
+ * @param end Pointer to the ending index of the token to modify.
+ * @param input_length The total length of the input buffer.
+ */
+void find_tkn_end(int *start, int *end, int *input_length)
+{
+  *end = *start;
+  while (*end < *input_length && buffer[*end] != ' ' && buffer[*end] != '\t')
+  {
+    (*end)++;
   }
 }
 
 /**
  * @brief Checks for the "exit" command and returns 1 if found, otherwise 0.
- * 
+ *
  * @param cmd A pointer to the Command structure to check.
  * @return int Returns 1 if the command is "exit", otherwise returns 0.
  */
 int isExit(const Command *cmd)
 {
-  if (cmd->argc == 1 && mystrlen(cmd->argv[0]) == 4) {
+  if (cmd->argc == 1 && mystrlen(cmd->argv[0]) == 4)
+  {
     if (mystrcmp(cmd->argv[0], "exit") == 0)
     {
       return 1;
@@ -243,9 +264,8 @@ void run_command(const Command *cmd, char *envp[])
   if (cmd->argc == 0)
     return; // no commands were sent
 
-  
   /** shouldn't this be happening in the main while loop?? */
-    // exit
+  // exit
   /**if (mystrcmp(cmd->argv[0], "exit") == 0)
   {
     _exit(0);
@@ -271,7 +291,6 @@ void run_command(const Command *cmd, char *envp[])
   int status;
   waitpid(pid, &status, 0);
 }
-
 
 // CURRENTLY UNUSED FUNCTIONS
 /**
