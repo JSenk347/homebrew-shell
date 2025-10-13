@@ -9,10 +9,10 @@
  */
 
 #include "mystring.h"
-/*
-#include <string.h>
-#include <stdio.h>
-*/
+
+
+// #include <string.h>
+// #include <stdio.h>
 
 /**
 * @brief computes and returns the length of a NULL TERMINATED string.
@@ -67,16 +67,27 @@ char *mystrcpy(const char *src, char *dest)
   return orig_dest;
 }
 
-//For testing
-/*
-int main(){
-  char s1[] = "what it do boo?";
-  char s2[] = "not much boo wbu?";
+/**
+ * @brief Concatenates the source string to the destination string
+ * 
+ * @param src a pointer to the source string's first element
+ * @param dest a pointer to the destination string's first element
+ * @return a pointer to the first char in the dest string's char array
+ */
+char *mystrcat(const char *src, char *dest){
+  char *original_dest = dest;
 
-  printf("String Length (s1): %u\n", mystrlen(s1));
-  printf("String Length (s2): %u\n", mystrlen(s2));
-  printf("String Comp (s1, s2): %i\n", mystrcmp(s1, s2));
-  printf("String Comp (s1, s2): %i\n", strcmp(s1, s2));
-  printf("Copied String (s1, s2): s2 = '%s'\n", mystrcpy(s1, s2));
+  while (*dest != '\0') {
+    dest++;
+  }
+
+  while (*src != '\0') {
+    *dest = *src;
+    dest++;
+    src++;
+  }
+
+  *dest = '\0';
+
+  return original_dest;
 }
-*/
