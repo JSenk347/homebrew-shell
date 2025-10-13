@@ -12,6 +12,7 @@
 #include "jobs.h"
 #include "myheap.h"
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -261,6 +262,8 @@ static void print_command(const Command *cmd)
  */
 void run_command(const Command *cmd, char *envp[])
 {
+  char base_path[] = "/usr/bin/";
+
   if (cmd->argc == 0)
     return; // no commands were sent
 
@@ -281,7 +284,8 @@ void run_command(const Command *cmd, char *envp[])
 
   if (pid == 0)
   { // Child doing some work
-    execve(cmd->argv[0], cmd->argv, envp);
+    char *full_path = mystrcat(cmd -> argv[0], base_path); // appending argument 0 to base path "/user/bin/"
+    execve(full_path, cmd->argv, envp);
 
     // error
     write(2, "execve failed\n", 14);
