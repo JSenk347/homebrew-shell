@@ -25,11 +25,12 @@ struct Command cmd;
 
 // FUNCTION PROTOTYPES
 void get_command(Command *cmd);
-int isExit(const Command *cmd); /** trying this out - ARR */
 void read_input(/*char *buffer, */ int *input_length);
-int check_exit(char *buffer, int *input_length);
 void tokenize(/*char *buffer,*/ int *input_length, Command *cmd);
+void find_start(int *start, int *input_length); /** trying this out - ARR */
+int isExit(const Command *cmd); /** trying this out - ARR */
 void run_command(const Command *cmd, char *envp[]);
+//int check_exit(char *buffer, int *input_length); not in use - ARR
 
 
 int main(int argc, char *argv[], char *envp[])
@@ -67,35 +68,10 @@ void get_command(Command *cmd)
 }
 
 /**
- * @brief Checks for the "exit" command and returns 1 if found, otherwise 0.
- * 
- * @param cmd A pointer to the Command structure to check.
- * @return int Returns 1 if the command is "exit", otherwise returns 0.
- */
-int isExit(const Command *cmd)
-{
-  if (cmd->argc == 1 && mystrlen(cmd->argv[0]) == 4) {
-    if (mystrcmp(cmd->argv[0], "exit") == 0)
-    {
-      return 1;
-    }
-    else if (mystrcmp(cmd->argv[0], "EXIT") == 0)
-    {
-      return 1;
-    }
-    else if (mystrcmp(cmd->argv[0], "Exit") == 0)
-    {
-      return 1;
-    }
-  }
-  return 0;
-}
-
-/**
  * @brief This function prompts the user for input and then reads the input
  *          from the keyboard into the buffer.
  *
- * @param buffer A character array to store the user input.
+ * -not anymore ARR-@param buffer A character array to store the user input.
  * @param input_length A pointer to an integer to store the length of the input string.
  */
 void read_input(/*char *buffer, */ int *input_length)
@@ -133,8 +109,9 @@ void read_input(/*char *buffer, */ int *input_length)
 /**
  * @brief This function parses the input buffer into arguments.
  *
- * @param buffer A character array containing the user input.
+ * - not anymore ARR-@param buffer A character array containing the user input.
  * @param input_length A pointer to an integer representing the length of the input.
+ * @param cmd A pointer to a Command structure to store the parsed arguments.
  */
 void tokenize(/*char *buffer,*/ int *input_length, Command *cmd)
 {
@@ -144,11 +121,13 @@ void tokenize(/*char *buffer,*/ int *input_length, Command *cmd)
   int token_length;
   cmd->argc = 0;
 
+  find_start(&start, input_length); /** trying this out - ARR */
+  /** turn this into it's own helper function find_start(int *start, int *input_length) ? - ARR
   // Skip over white space
   while (start < *input_length && (buffer[start] == ' ' || buffer[start] == '\t'))
   {
     start++;
-  }
+  } */
   // set input_length to 0 if input is all spaces or tabs
   if (start >= *input_length)
   {
@@ -201,24 +180,42 @@ void tokenize(/*char *buffer,*/ int *input_length, Command *cmd)
 }
 
 /**
- * @brief This function checks if the input command is "exit" (case-insensitive).
- *
- * @param buffer A character array containing the user input.
- * @param input_length A pointer to an integer representing the length of the input.
- *
- * @return int Returns 1 if the input is "exit", otherwise returns 0.
-
-int check_exit(char *buffer, int *input_length) {
-  if (*input_length == 4 && (buffer[0] == 'e' || buffer[0] == 'E') &&
-    (buffer[1] == 'x' || buffer[1] == 'X') &&
-    (buffer[2] == 'i' || buffer[2] == 'I') &&
-    (buffer[3] == 't' || buffer[3] == 'T')) {
-    return 1;
+ * @brief Skip over initial white space until a non-white space char is found.
+ * 
+ * @param start Pointer to the starting index to modify.
+ * @param input_length The total length of the input buffer.
+ */
+void find_start(int *start, int *input_length) {
+  while (*start < *input_length && (buffer[*start] == ' ' || buffer[*start] == '\t'))
+  {
+    *start++;
   }
+}
 
+/**
+ * @brief Checks for the "exit" command and returns 1 if found, otherwise 0.
+ * 
+ * @param cmd A pointer to the Command structure to check.
+ * @return int Returns 1 if the command is "exit", otherwise returns 0.
+ */
+int isExit(const Command *cmd)
+{
+  if (cmd->argc == 1 && mystrlen(cmd->argv[0]) == 4) {
+    if (mystrcmp(cmd->argv[0], "exit") == 0)
+    {
+      return 1;
+    }
+    else if (mystrcmp(cmd->argv[0], "EXIT") == 0)
+    {
+      return 1;
+    }
+    else if (mystrcmp(cmd->argv[0], "Exit") == 0)
+    {
+      return 1;
+    }
+  }
   return 0;
 }
- */
 
 /**
  * @brief This function prints the contents of a Command structure for
@@ -274,3 +271,25 @@ void run_command(const Command *cmd, char *envp[])
   int status;
   waitpid(pid, &status, 0);
 }
+
+
+// CURRENTLY UNUSED FUNCTIONS
+/**
+ * @brief This function checks if the input command is "exit" (case-insensitive).
+ *
+ * @param buffer A character array containing the user input.
+ * @param input_length A pointer to an integer representing the length of the input.
+ *
+ * @return int Returns 1 if the input is "exit", otherwise returns 0.
+
+int check_exit(char *buffer, int *input_length) {
+  if (*input_length == 4 && (buffer[0] == 'e' || buffer[0] == 'E') &&
+    (buffer[1] == 'x' || buffer[1] == 'X') &&
+    (buffer[2] == 'i' || buffer[2] == 'I') &&
+    (buffer[3] == 't' || buffer[3] == 'T')) {
+    return 1;
+  }
+
+  return 0;
+}
+ */
