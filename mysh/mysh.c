@@ -1,7 +1,8 @@
 /**
  * Summary: Contains the main function for a simple shell program.
  *
- * Current functionality: Runs the shell loop.
+ * Current functionality: Runs the shell loop - prompts user for command,
+ *    execve fails every time, exit works.
  *
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
  * @file: mysh.c
