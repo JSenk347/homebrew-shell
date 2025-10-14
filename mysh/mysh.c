@@ -28,7 +28,7 @@ int buffer_index = 0; // will probably need this
 static void print_command(const Command *cmd);
 Command commands[MAX_COMMANDS];
 Job all_jobs[MAX_JOBS]; // Array to hold all jobs;
-
+void slay_zombies();
 // STRUCTURES
 struct Job job1;
 
@@ -42,6 +42,8 @@ void find_start(int *start, int *input_length);
 void find_tkn_end(int *start, int *end, int *input_length);
 int isExit(const Command *cmd);
 void run_command(Command *cmd, char *envp[]);
+static int is_space(char c){ return c==' ' || c=='\t'; }
+static int is_special(char c){ return c=='|' || c=='<' || c=='>' || c=='&'; }
 // void tokenize(/*char *buffer,*/ int *input_length, Command *cmd); - ARR
 // int check_exit(char *buffer, int *input_length); not in use - ARR
 
@@ -67,6 +69,7 @@ int main(int argc, char *argv[], char *envp[])
 
   while (!isExit(&cmd))
   {
+    
     run_command(&cmd, envp);
     cmd = get_command();
   }
@@ -86,13 +89,14 @@ Command get_command()
   Command cmd;
   Command *cmd_ptr = &cmd;
   int input_length = 0;
-
+  slay_zombies();
   write(1, "$ ", 2); // prompt
 
   read_input(&input_length); // read command line into buffer
   free_all();
   // parse_job() will go here ?
-  parse_command(cmd_ptr, &input_length, ""); // will evntually be replaced by parse_job()
+  char delim = 0;
+  parse_command(cmd_ptr, &input_length, &delim); // will evntually be replaced by parse_job()
   /**tokenize(/*buffer, &input_length, cmd); // parse input into arguments*/
   free_all();
 
@@ -139,7 +143,7 @@ Job parse_job(){
   job.is_background = FALSE;
   int input_index = 0;
 
-  char delimiter = NULL;
+  char delimiter = 0;
   int input_length = mystrlen(buffer);
   
   //Parse the pipeline section
@@ -156,10 +160,10 @@ void parse_pipeline(int *input_length, char *delimiter)
   Command write_cmd;
   Command read_cmd;
 
-  parse_command(&write_cmd, &input_length, delimiter);
+  parse_command(&write_cmd, input_length, delimiter);
   if (*delimiter == '|') // will need to change to loop if we want 3+ commands in pipeline
   {
-    parse_command(&read_cmd, &input_length, delimiter);
+    parse_command(&read_cmd, input_length, delimiter);
   }
   return;
 }
@@ -435,3 +439,10 @@ int check_exit(char *buffer, int *input_length) {
   return 0;
 }
  */
+
+ void slay_zombies() {
+    int status, count = 0;
+    pid_t pid;
+    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
+    }
+}
