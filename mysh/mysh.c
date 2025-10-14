@@ -24,7 +24,6 @@
 #define FALSE 0
 
 char buffer[MAX_TOKENS]; // Global Buffer
-int buffer_index = 0; // will probably need this
 static void print_command(const Command *cmd);
 Command commands[MAX_COMMANDS];
 Job all_jobs[MAX_JOBS]; // Array to hold all jobs;
@@ -91,7 +90,7 @@ Command get_command()
 
   read_input(&input_length); // read command line into buffer
   free_all();
-  // parse_job() will go here ?
+  //Job job = parse_job();
   parse_command(cmd_ptr, &input_length, ""); // will evntually be replaced by parse_job()
   /**tokenize(/*buffer, &input_length, cmd); // parse input into arguments*/
   free_all();
@@ -139,7 +138,7 @@ Job parse_job(){
   job.is_background = FALSE;
   int input_index = 0;
 
-  char delimiter = NULL;
+  char delimiter = FALSE;
   int input_length = mystrlen(buffer);
   
   //Parse the pipeline section
@@ -156,10 +155,10 @@ void parse_pipeline(int *input_length, char *delimiter)
   Command write_cmd;
   Command read_cmd;
 
-  parse_command(&write_cmd, &input_length, delimiter);
+  parse_command(&write_cmd, input_length, delimiter);
   if (*delimiter == '|') // will need to change to loop if we want 3+ commands in pipeline
   {
-    parse_command(&read_cmd, &input_length, delimiter);
+    parse_command(&read_cmd, input_length, delimiter);
   }
   return;
 }
