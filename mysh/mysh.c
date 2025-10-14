@@ -18,30 +18,57 @@
 #include <sys/wait.h>
 #define MAX_TOKENS 300
 #define MAX_ARGS 10
+#define MAX_JOBS 10
+#define MAX_COMMANDS 10
+#define TRUE 1
+#define FALSE 0
+
 char buffer[MAX_TOKENS]; // Global Buffer
+int buffer_index = 0; // will probably need this
 static void print_command(const Command *cmd);
+Command commands[MAX_COMMANDS];
+Job all_jobs[MAX_JOBS]; // Array to hold all jobs;
 
 // STRUCTURES
-struct Command cmd;
+struct Job job1;
 
 // FUNCTION PROTOTYPES
-void get_command(Command *cmd);
+Command get_command();
 void read_input(/*char *buffer, */ int *input_length);
-void tokenize(/*char *buffer,*/ int *input_length, Command *cmd);
-void find_start(int *start, int *input_length);             /** trying this out - ARR */
-void find_tkn_end(int *start, int *end, int *input_length); /** trying this our - ARR */
-int isExit(const Command *cmd);                             /** trying this out - ARR */
-void run_command(const Command *cmd, char *envp[]);
+void parse_pipeline(int *input_length, char *delimiter);
+void parse_command(Command *cmd, int *input_length, char *delimiter);
+void add_arg(Command *cmd, int token_length, int *start_ptr); /*trying this out ARR*/
+void find_start(int *start, int *input_length);
+void find_tkn_end(int *start, int *end, int *input_length);
+int isExit(const Command *cmd);
+void run_command(Command *cmd, char *envp[]);
+// void tokenize(/*char *buffer,*/ int *input_length, Command *cmd); - ARR
 // int check_exit(char *buffer, int *input_length); not in use - ARR
+
+// TEST INSTANCES OF JOB/////////////////////////
+struct Job eg1 = {
+    {{{"ls", "-al", "/library", NULL}, 3}},
+    1,
+    NULL,
+    NULL,
+    0};
+struct Job eg2 = {
+    {{{"ls", "-al", "/library", NULL}, 3},
+     {{"wc", "-l", NULL}, 2}},
+    2,
+    "dirlistlen",
+    NULL,
+    1};
+/////////////////////////////////////////////////
 
 int main(int argc, char *argv[], char *envp[])
 {
-  get_command(&cmd);               // added to match week 04 guidance template - ARR
-  while (/**1*/ isExit(&cmd) == 0) // changed to match week 04 guidance template - ARR
+  Command cmd = get_command();
+
+  while (!isExit(&cmd))
   {
-    /**get_command(&cmd); modified to match week 04 guidance template - ARR */
     run_command(&cmd, envp);
-    get_command(&cmd); // added to match week 04 guidance template - ARR
+    cmd = get_command();
   }
   return 0;
 }
@@ -49,32 +76,36 @@ int main(int argc, char *argv[], char *envp[])
 // HELPER FUNCTIONS
 /**
  * @brief This function prompts the user for input, reads the input from
- *          the keyboard, and parses it into a Command structure.
+ *        the keyboard, creates a command structure, and parses it into
+ *        the Command structure.
  *
  * @param cmd A pointer to a Command structure to store the parsed command.
  */
-void get_command(Command *cmd)
+Command get_command()
 {
-  // char buffer[MAX_TOKENS];
+  Command cmd;
+  Command *cmd_ptr = &cmd;
   int input_length = 0;
 
-  write(1, "$ ", 2);                      // prompt
-  read_input(/*buffer, */ &input_length); // read command line into buffer
+  write(1, "$ ", 2); // prompt
+
+  read_input(&input_length); // read command line into buffer
   free_all();
-  tokenize(/*buffer,*/ &input_length, cmd); // parse input into arguments
+  // parse_job() will go here ?
+  parse_command(cmd_ptr, &input_length, ""); // will evntually be replaced by parse_job()
+  /**tokenize(/*buffer, &input_length, cmd); // parse input into arguments*/
   free_all();
 
-  return;
+  return cmd;
 }
 
 /**
  * @brief This function prompts the user for input and then reads the input
  *          from the keyboard into the buffer.
  *
- * -not anymore ARR-@param buffer A character array to store the user input.
  * @param input_length A pointer to an integer to store the length of the input string.
  */
-void read_input(/*char *buffer, */ int *input_length)
+void read_input(int *input_length)
 {
   char c;
   int i = 0;
@@ -88,98 +119,125 @@ void read_input(/*char *buffer, */ int *input_length)
     n = read(0, &c, 1);
   }
 
-  /*
-  //check for input exceeding max char limit
-  if (c != '\n') {
-    // error message
-    write(1, "Error: input exceeds max char limit\n", 37);
-
-    //clear input until newline
-    while (n > 0 && c != '\n') {
-      n = read(0, &c, 1);
-    }
-
-    //skips the rest of the loop and starts over
-  }*/
   buffer[i] = '\0';
   *input_length = i;
   return;
 }
 
 /**
- * @brief This function parses the input buffer into arguments.
+ * @brief 
  *
- * - not anymore ARR-@param buffer A character array containing the user input.
- * @param input_length A pointer to an integer representing the length of the input.
- * @param cmd A pointer to a Command structure to store the parsed arguments.
+ * @param
+ * @return Job 
  */
-void tokenize(/*char *buffer,*/ int *input_length, Command *cmd)
+Job parse_job(){
+  // initialize job
+  Job job;
+  job.num_stages = 0;
+  job.infile_path = NULL;
+  job.outfile_path = NULL;
+  job.is_background = FALSE;
+  int input_index = 0;
+
+  char delimiter = NULL;
+  int input_length = mystrlen(buffer);
+  
+  //Parse the pipeline section
+  
+}
+
+/**
+ * @brief This function parses the
+ *
+ * @param input_length A pointer to an integer representing the length of the command line input.
+ */
+void parse_pipeline(int *input_length, char *delimiter)
 {
-  int start = 0;
-  int end = 0;
-  int token_length;
+  Command write_cmd;
+  Command read_cmd;
+
+  parse_command(&write_cmd, &input_length, delimiter);
+  if (*delimiter == '|') // will need to change to loop if we want 3+ commands in pipeline
+  {
+    parse_command(&read_cmd, &input_length, delimiter);
+  }
+  return;
+}
+
+/**
+ * @brief This function parses the input buffer into commands.
+ *
+ * @param input_length A pointer to an integer representing the length of the command line imput.
+ * @return Command
+ */
+void parse_command(Command *cmd, int *input_length, char *delimiter)
+{
   cmd->argc = 0;
-  int *start_ptr = &start;
+  int curr = 0;
+  int end = 0;
+  int token_len = 0;
+  int *start_ptr = &curr;
   int *end_ptr = &end;
 
-  find_start(start_ptr, input_length); /** trying this out - ARR */
-  /** turn this into it's own helper function find_start(int *start, int *input_length) ? - ARR
-  // Skip over white space
-  while (start < *input_length && (buffer[start] == ' ' || buffer[start] == '\t'))
-  {
-    start++;
-  } */
+  find_start(start_ptr, input_length); // adjusts start to be 0th index of first arg (if any)
+
   // set input_length to 0 if input is all spaces or tabs
-  if (start >= *input_length)
+  if (curr >= *input_length)
   {
     *input_length = 0; // No arguments
     cmd->argv[0] = NULL;
-    return;
+    return; // just doing this for now to avoid warnings
   }
 
-  // Main tokenizing loop
-  while (start < *input_length)
+  // adds each token to the cmd struct as an argument
+  while (curr < *input_length)
   {
     // find the next space or tab char
-    find_tkn_end(start_ptr, end_ptr, input_length); /** trying this out - ARR */
-    /** turn this into it's own helper function find_tkn_end(int *start, int *end, int *input_length) ? - ARR
-    end = start;
-    while (end < *input_length && buffer[end] != ' ' && buffer[end] != '\t')
-    {
-      end++;
-    } */
+    find_tkn_end(start_ptr, end_ptr, input_length);
 
-    token_length = end - start;
-    if (token_length > 0)
+    // Check if the token is '|' and handle accordingly
+    if (end - curr == 1 && (mystrcmp(&buffer[curr], "|") == 0 || mystrcmp(&buffer[curr], "<") == 0 ||
+                            mystrcmp(&buffer[curr], ">") == 0 || mystrcmp(&buffer[curr], "&") == 0))
     {
-      if (cmd->argc < MAX_ARGS)
-      {
-        char *token = alloc(token_length + 1);
-        for (int i = 0; i < token_length; i++)
-        {
-          token[i] = buffer[start + i];
-        }
-        token[token_length] = '\0';
-        cmd->argv[cmd->argc++] = token;
-      }
-      else
-      {
-        write(2, "Too many args\n", 14);
-        break;
-      }
+      *delimiter = buffer[curr];
+      return; // return to parse_pipeline
     }
-    // Advance past this token
-    start = end;
 
-    while (start < *input_length && (buffer[start] == ' ' || buffer[start] == '\t'))
-    {
-      start++;
-    }
+    // adds the token to the cmd struct as an argument
+    int token_length = end - curr;
+    add_arg(cmd, token_length, start_ptr);
+
+    // move to end of added token
+    curr = end;
+
+    // skip over spaces and tabs to the start of the next token (if any)
+    find_start(start_ptr, input_length);
   }
 
   cmd->argv[cmd->argc] = NULL;
 
   return;
+}
+
+void add_arg(Command *cmd, int token_length, int *start_ptr)
+{
+  if (token_length > 0)
+  {
+    if (cmd->argc < MAX_ARGS)
+    {
+      char *token = alloc(token_length + 1);
+      for (int i = 0; i < token_length; i++)
+      {
+        token[i] = buffer[*start_ptr + i];
+      }
+      token[token_length] = '\0';
+      cmd->argv[cmd->argc++] = token;
+    }
+    else
+    {
+      write(2, "Too many args\n", 14);
+    }
+  }
 }
 
 /**
@@ -247,7 +305,6 @@ int isExit(const Command *cmd)
  */
 static void print_command(const Command *cmd)
 {
-  printf("argc=%d\n", cmd->argc);
   for (int i = 0; i < cmd->argc; i++)
   {
     printf("argv[%d] = \"%s\"\n", i, cmd->argv[i]);
@@ -260,19 +317,14 @@ static void print_command(const Command *cmd)
  * @param cmd  Parsed command structure (argv/argc).
  * @param envp Environment passed down from main.
  */
-void run_command(const Command *cmd, char *envp[])
+void run_command(Command *cmd, char *envp[])
 {
   char base_path[] = "/usr/bin/";
 
   if (cmd->argc == 0)
-    return; // no commands were sent
-
-  /** shouldn't this be happening in the main while loop?? */
-  // exit
-  /**if (mystrcmp(cmd->argv[0], "exit") == 0)
   {
-    _exit(0);
-  }*/
+    return; // no commands were sent
+  }
 
   pid_t pid = fork();
   if (pid < 0)
@@ -283,8 +335,10 @@ void run_command(const Command *cmd, char *envp[])
   }
 
   if (pid == 0)
-  { // Child doing some work
-    char *full_path = mystrcat(cmd -> argv[0], base_path); // appending argument 0 to base path "/user/bin/"
+  {
+    // Child doing some work
+    cmd->argv[cmd->argc] = NULL;                         // ensure argv is NULL-terminated
+    char *full_path = mystrcat(cmd->argv[0], base_path); // appending argument 0 to base path "/user/bin/"
     execve(full_path, cmd->argv, envp);
 
     // error
@@ -297,6 +351,71 @@ void run_command(const Command *cmd, char *envp[])
 }
 
 // CURRENTLY UNUSED FUNCTIONS
+/**
+ * @brief This function parses the input buffer into arguments.
+ *
+ * @param input_length A pointer to an integer representing the length of the input.
+ * @param cmd A pointer to a Command structure to store the parsed arguments.
+ */
+/**void tokenize(int *input_length, Command *cmd)
+{
+  int start = 0;
+  int end = 0;
+  int token_length;
+  cmd->argc = 0;
+  int *start_ptr = &start;
+  int *end_ptr = &end;
+
+  find_start(start_ptr, input_length);
+
+  // set input_length to 0 if input is all spaces or tabs
+  if (start >= *input_length)
+  {
+    *input_length = 0; // No arguments
+    cmd->argv[0] = NULL;
+    return;
+  }
+
+  // Main tokenizing loop
+  while (start < *input_length)
+  {
+    // find the next space or tab char
+    find_tkn_end(start_ptr, end_ptr, input_length);
+
+    token_length = end - start;
+    add_arg(cmd, token_length, start_ptr);
+    /**if (token_length > 0)
+    {
+      if (cmd->argc < MAX_ARGS)
+      {
+        char *token = alloc(token_length + 1);
+        for (int i = 0; i < token_length; i++)
+        {
+          token[i] = buffer[start + i];
+        }
+        token[token_length] = '\0';
+        cmd->argv[cmd->argc++] = token;
+      }
+      else
+      {
+        write(2, "Too many args\n", 14);
+        break;
+      }
+    }/
+    // Advance past this token
+    start = end;
+
+    while (start < *input_length && (buffer[start] == ' ' || buffer[start] == '\t'))
+    {
+      start++;
+    }
+  }
+
+  cmd->argv[cmd->argc] = NULL;
+
+  return;
+}*/
+
 /**
  * @brief This function checks if the input command is "exit" (case-insensitive).
  *
