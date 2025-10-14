@@ -2,7 +2,8 @@
  * Summary: Contains the main function for a simple shell program.
  *
  * Current functionality: Runs the shell loop - prompts user for command,
- *    execve fails every time, exit works.
+ *    can run jobs with single stages/commands (no pipes, redirection, or
+ *    background)
  *
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
  * @file: mysh.c
@@ -33,11 +34,11 @@ struct Job job1;
 
 // FUNCTION PROTOTYPES
 Job get_job();
-void read_input(/*char *buffer, */ int *input_length);
+void read_input(int *input_length);
 void parse_job(Job *job, int *input_index);
 void parse_pipeline(Job *job, int *input_index);
-void parse_command(Command *cmd, int *input_index, int *input_length /**, char *delimiter*/);
-void add_arg(Command *cmd, int token_length, int /***start_ptr*/*curr); /*trying this out ARR*/
+void parse_command(Command *cmd, int *input_index, int *input_length);
+void add_arg(Command *cmd, int token_length, int *curr);
 void find_start(int *start, int *input_length);
 void find_tkn_end(int *start, int *end, int *input_length);
 int isExit(const Command *cmd);
@@ -65,19 +66,17 @@ struct Job eg2 = {
 int main(int argc, char *argv[], char *envp[])
 {
   Job job = get_job();
-  // Command cmd = get_command(); // replace by get_job()
 
   while (!isExit(/**&cmd*/ &job.pipeline[0]))
   {
     // run_job(&job);
     run_command(&job.pipeline[0], envp); // will be replaced by run_job()
     job = get_job();
-    // cmd = get_command();     // will be replaced by get_job()
   }
   return 0;
 }
 
-// INPUT PARSING HELPER FUNCTIONS
+// INPUT READ/STORE FUNCTIONS
 /**
  * @brief This function prompts the user for input, reads the input from
  *        the keyboard, creates a Job structure, and parses the input into
@@ -101,7 +100,7 @@ Job get_job()
   write(1, "$ ", 2);         // prompt
   read_input(&input_length); // read command line into buffer
   free_all();
-  parse_job(job_ptr, &input_index);
+  parse_job(job_ptr, &input_index); // parse buffer into job
   free_all();
 
   return job;
@@ -109,9 +108,10 @@ Job get_job()
 
 /**
  * @brief This function prompts the user for input and then reads the input
- *          from the keyboard into the buffer.
+ *        from the keyboard into the buffer.
  *
- * @param input_length A pointer to an integer to store the length of the input string.
+ * @param input_length A pointer to an integer to store the length of the input
+ *        string.
  */
 void read_input(int *input_length)
 {
@@ -133,13 +133,15 @@ void read_input(int *input_length)
 }
 
 /**
- * @brief This function parses the full command line into a Job structure which
- *        can tell the shell how many commands to run, what each command's
- *        arguments are, whether to connect commands with pipes, where to send
- *        input/output, and whether to run in the background.
+ * @brief This function parses the buffer which holds the full command line
+ *        into a Job so the Job can tell the shell how many commands to run,
+ *        what each command's arguments are, whether to connect commands with
+ *        pipes, where to send input/output, and whether to run the command in
+ *        the background.
  *
- * @param job A pointer to a Job structure to store the parsed job.
- * @param input_index A pointer to an integer representing the current index in the input buffer.
+ * @param job A pointer to a Job structure which stores the parsed job.
+ * @param input_index A pointer to an integer representing the current index in
+ *        the input buffer.
  */
 void parse_job(Job *job, int *input_index)
 {
@@ -208,6 +210,60 @@ void parse_pipeline(Job *job, int *input_index)
   return;
 }
 
+void add_arg(Command *cmd, int token_length, int /***start_ptr*/*curr)
+{  
+  if (token_length > 0)
+  {
+    if (cmd->argc < MAX_ARGS)
+    {
+      char *token = alloc(token_length + 1);
+      for (int i = 0; i < token_length; i++)
+      {
+        token[i] = buffer[/***start_ptr*/*curr + i];
+      }
+      token[token_length] = '\0';
+      cmd->argv[cmd->argc++] = token;
+    }
+    else
+    {
+      write(2, "Too many args\n", 14);
+    }
+  }
+}
+
+/**
+ * @brief Skip over initial white space until a non-white space char is found.
+ *
+ * @param start Pointer to the starting index to modify.
+ * @param input_length The total length of the input buffer.
+ */
+void find_start(int *start, int *input_length)
+{
+  while (*start < *input_length && (buffer[*start] == ' ' || buffer[*start] == '\t'))
+  {
+    (*start)++;
+  }
+}
+
+/**
+ * @brief Find the end index of the current token by searching for the next
+ *        white space character or the end of the input.
+ *
+ * @param start Pointer to the starting index of the token.
+ * @param end Pointer to the ending index of the token to modify.
+ * @param input_length The total length of the input buffer.
+ */
+void find_tkn_end(int *start, int *end, int *input_length)
+{
+  *end = *start;
+  while (*end < *input_length && buffer[*end] != ' ' && buffer[*end] != '\t')
+  {
+    (*end)++;
+  }
+}
+
+
+// JOB EXECUTION FUNCTIONS
 void run_job(Job *job)
 {
 }
@@ -271,58 +327,6 @@ void parse_command(Command *cmd, int *input_index, int *input_length /**, char *
   *input_index = curr; // updates input_index to the current position in buffer
 
   return;
-}
-
-void add_arg(Command *cmd, int token_length, int /***start_ptr*/*curr)
-{  
-  if (token_length > 0)
-  {
-    if (cmd->argc < MAX_ARGS)
-    {
-      char *token = alloc(token_length + 1);
-      for (int i = 0; i < token_length; i++)
-      {
-        token[i] = buffer[/***start_ptr*/*curr + i];
-      }
-      token[token_length] = '\0';
-      cmd->argv[cmd->argc++] = token;
-    }
-    else
-    {
-      write(2, "Too many args\n", 14);
-    }
-  }
-}
-
-/**
- * @brief Skip over initial white space until a non-white space char is found.
- *
- * @param start Pointer to the starting index to modify.
- * @param input_length The total length of the input buffer.
- */
-void find_start(int *start, int *input_length)
-{
-  while (*start < *input_length && (buffer[*start] == ' ' || buffer[*start] == '\t'))
-  {
-    (*start)++;
-  }
-}
-
-/**
- * @brief Find the end index of the current token by searching for the next
- *        white space character or the end of the input.
- *
- * @param start Pointer to the starting index of the token.
- * @param end Pointer to the ending index of the token to modify.
- * @param input_length The total length of the input buffer.
- */
-void find_tkn_end(int *start, int *end, int *input_length)
-{
-  *end = *start;
-  while (*end < *input_length && buffer[*end] != ' ' && buffer[*end] != '\t')
-  {
-    (*end)++;
-  }
 }
 
 /**
