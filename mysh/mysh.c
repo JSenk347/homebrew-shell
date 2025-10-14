@@ -184,25 +184,27 @@ void parse_job(Job *job, int *input_index)
  *        commands as long as the next symbol after each command is the char
  *        literal '|'.
  *
- * @param job A pointer to a Job structure to store the parsed pipeline commands.
- * @param input_index A pointer to an integer representing the current index in the input buffer.
+ * @param job A pointer to a Job structure to store the parsed pipeline
+ *        commands.
+ * @param input_index A pointer to an integer representing the current index in
+ *        the input buffer.
  */
 void parse_pipeline(Job *job, int *input_index)
 {
   Command cmd;
-  int input_length = mystrlen(buffer) /** - *input_index*/; // length of full input
+  int input_length = mystrlen(buffer); // length of full input
   // char delimiter = FALSE;
 
   // parses input into tokens for first command
-  parse_command(&cmd, input_index, &input_length /**, &delimiter*/);
+  parse_command(&cmd, input_index, &input_length);
   job->pipeline[job->num_stages] = cmd;        // add first command to job
   job->num_stages++;
 
   while (buffer[*input_index] == '|')
   {
     // continue parsing next command in pipeline
-    (*input_index)++; // skip over '|'
-    parse_command(&cmd, input_index, &input_length /** , &delimiter*/);
+    (*input_index)++; // move over '|'
+    parse_command(&cmd, input_index, &input_length);
     job->pipeline[job->num_stages] = cmd; // add next command to job
     job->num_stages++;
   }
@@ -210,7 +212,72 @@ void parse_pipeline(Job *job, int *input_index)
   return;
 }
 
-void add_arg(Command *cmd, int token_length, int /***start_ptr*/*curr)
+/**
+ * @brief This function parses the input buffer into commands by extracting
+ *        each token until either one of the char literals '<', '>', '|', or
+ *        '&', or the end of line is reached.
+ *
+ * @param cmd A pointer to a Command structure to store the parsed arguments.
+ * @param input_index A pointer to an integer representing the current index in
+ *        the input buffer.
+ * @param input_length A pointer to an integer representing the length of the
+ *        command line imput.
+ */
+void parse_command(Command *cmd, int *input_index, int *input_length)
+{
+  cmd->argc = 0;
+  int curr = *input_index /**0*/;
+  int end = *input_index /**0*/;
+  int token_len = 0;
+  int *end_ptr = &end;
+  
+  // adjusts start to be 0th index of next arg (if any)
+  find_start(&curr, input_length);
+
+  // checks if input is entirely whitespace
+  if (curr >= *input_length)
+  {
+    *input_length = 0; // No arguments
+    cmd->argv[0] = NULL;
+    return;
+  }
+
+  // adds each token to the cmd struct as an argument
+  while (curr < *input_length)
+  {
+    // find the next space or tab char
+    find_tkn_end(&curr, end_ptr, input_length);
+
+    // Check if the token is any of the special literals and handle accordingly
+    if (end - curr == 1 && (mystrcmp(&buffer[curr], "|") == 0 ||
+                            mystrcmp(&buffer[curr], "<") == 0 ||
+                            mystrcmp(&buffer[curr], ">") == 0 ||
+                            mystrcmp(&buffer[curr], "&") == 0))
+    {
+
+      *input_index = curr; // updates input_index to the current position in buffer
+      return;              // return to parse_pipeline
+    }
+
+    // adds the token to the cmd struct as an argument
+    int token_length = end - curr;
+    add_arg(cmd, token_length, &curr);
+
+    // move to end of added token
+    curr = end;
+    *input_index = curr;
+
+    // skip over spaces and tabs to the start of the next token (if any)
+    find_start(&curr, input_length);
+  }
+
+  cmd->argv[cmd->argc] = NULL;
+  *input_index = curr; // updates input_index to the current position in buffer
+
+  return;
+}
+
+void add_arg(Command *cmd, int token_length, int *curr)
 {  
   if (token_length > 0)
   {
@@ -219,7 +286,7 @@ void add_arg(Command *cmd, int token_length, int /***start_ptr*/*curr)
       char *token = alloc(token_length + 1);
       for (int i = 0; i < token_length; i++)
       {
-        token[i] = buffer[/***start_ptr*/*curr + i];
+        token[i] = buffer[*curr + i];
       }
       token[token_length] = '\0';
       cmd->argv[cmd->argc++] = token;
@@ -266,67 +333,6 @@ void find_tkn_end(int *start, int *end, int *input_length)
 // JOB EXECUTION FUNCTIONS
 void run_job(Job *job)
 {
-}
-
-/**
- * @brief This function parses the input buffer into commands by extracting
- *        each token until either one of the char literals '<', '>', '|', or
- *        '&', or the end of line is reached.
- *
- * @param cmd A pointer to a Command structure to store the parsed arguments.
- * @param input_index A pointer to an integer representing the current index in the input buffer.
- * @param input_length A pointer to an integer representing the length of the command line imput.
- */
-void parse_command(Command *cmd, int *input_index, int *input_length /**, char *delimiter*/)
-{
-  cmd->argc = 0;
-  int curr = *input_index /**0*/;
-  int end = *input_index /**0*/;
-  int token_len = 0;
-  //int *start_ptr = &curr;
-  int *end_ptr = &end;
-  
-  find_start(/**start_ptr*/&curr, input_length); // adjusts start to be 0th index of next arg (if any)
-
-  // set input_length to 0 if input is all spaces or tabs
-  if (curr >= *input_length)
-  {
-    *input_length = 0; // No arguments
-    cmd->argv[0] = NULL;
-    return; // just doing this for now to avoid warnings
-  }
-
-  // adds each token to the cmd struct as an argument
-  while (curr < *input_length)
-  {
-    // find the next space or tab char
-    find_tkn_end(/**start_ptr*/&curr, end_ptr, input_length);
-
-    // Check if the token is '|' and handle accordingly
-    if (end - curr == 1 && (mystrcmp(&buffer[curr], "|") == 0 || mystrcmp(&buffer[curr], "<") == 0 ||
-                            mystrcmp(&buffer[curr], ">") == 0 || mystrcmp(&buffer[curr], "&") == 0))
-    {
-      //*delimiter = buffer[curr];
-      *input_index = curr; // updates input_index to the current position in buffer
-      return;              // return to parse_pipeline
-    }
-
-    // adds the token to the cmd struct as an argument
-    int token_length = end - curr;
-    add_arg(cmd, token_length, /**start_ptr*/&curr);
-
-    // move to end of added token
-    curr = end;
-    *input_index = curr;
-
-    // skip over spaces and tabs to the start of the next token (if any)
-    find_start(/**start_ptr*/ &curr, input_length);
-  }
-
-  cmd->argv[cmd->argc] = NULL;
-  *input_index = curr; // updates input_index to the current position in buffer
-
-  return;
 }
 
 /**
