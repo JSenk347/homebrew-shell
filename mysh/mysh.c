@@ -27,21 +27,19 @@ Command commands[MAX_COMMANDS];
 Job all_jobs[MAX_JOBS]; // Array to hold all jobs;
 
 // STRUCTURES
-struct Command cmd;
 struct Job job1;
 
-
 // FUNCTION PROTOTYPES
-void get_command(Command *cmd);
+Command get_command();
 void read_input(/*char *buffer, */ int *input_length);
 void parse_pipeline(int *input_length);
-Command parse_command(int *input_length, char *delimiter);
+void parse_command(Command *cmd, int *input_length, char *delimiter);
 void add_arg(Command *cmd, int token_length, int *start_ptr); /*trying this out ARR*/
 void tokenize(/*char *buffer,*/ int *input_length, Command *cmd);
 void find_start(int *start, int *input_length);
 void find_tkn_end(int *start, int *end, int *input_length);
 int isExit(const Command *cmd);
-void run_command(const Command *cmd, char *envp[]);
+void run_command(Command *cmd, char *envp[]);
 // int check_exit(char *buffer, int *input_length); not in use - ARR
 
 // TEST INSTANCES OF JOB/////////////////////////
@@ -64,10 +62,12 @@ struct Job eg2 ={
 
 int main(int argc, char *argv[], char *envp[])
 {
-  get_command(&cmd);
+  Command cmd = get_command();
+
+  while (!isExit(&cmd))
   {
     run_command(&cmd, envp);
-    get_command(&cmd);
+    cmd = get_command();
   }
   return 0;
 }
@@ -81,30 +81,32 @@ int main(int argc, char *argv[], char *envp[])
 */
 void get_job(Job *job){
   // get an entire job and invoke run_job
-  get_command(&cmd);
+  // get_command(&cmd);
   //populate_job
 }
 
 /**
  * @brief This function prompts the user for input, reads the input from
- *          the keyboard, and parses it into a Command structure.
+ *        the keyboard, creates a command structure, and parses it into 
+ *        the Command structure.
  *
  * @param cmd A pointer to a Command structure to store the parsed command.
  */
-void get_command(Command *cmd)
-{
+Command get_command(){
   // char buffer[MAX_TOKENS];
+  Command cmd;
+  Command *cmd_ptr = &cmd;
   int input_length = 0;
 
   write(1, "$ ", 2);                      // prompt
   
-  read_input(/*buffer, */ &input_length); // read command line into buffer
+  read_input(&input_length); // read command line into buffer
   free_all();
-  *cmd = parse_command(&input_length, "");
+  parse_command(cmd_ptr, &input_length, "");
   /**tokenize(/*buffer, &input_length, cmd); // parse input into arguments*/
   free_all();
 
-  return;
+  return cmd;
 }
 
 
@@ -143,11 +145,11 @@ void parse_pipeline(int *input_length){
   struct Command read_cmd;
   char delimiter;
 
-  write_cmd = parse_command(input_length, &delimiter);
-  if (delimiter == '|')
-  {
-    read_cmd = parse_command(input_length, &delimiter);
-  }
+  // write_cmd = parse_command(input_length, &delimiter);
+  // if (delimiter == '|')
+  // {
+  //   read_cmd = parse_command(input_length, &delimiter);
+  // }
 }
 
 /**
@@ -156,23 +158,23 @@ void parse_pipeline(int *input_length){
  * @param input_length A pointer to an integer representing the length of the command line imput.
  * @return Command
  */
-Command parse_command(int *input_length, char *delimiter)
-{
-  struct Command cmd;
-  Command *cmd_ptr = &cmd;
-  cmd_ptr -> argc = 0;
-  int curr, end, token_len = 0;
+void parse_command(Command *cmd, int *input_length, char *delimiter){
+  cmd -> argc = 0;
+  int curr = 0;
+  int end = 0; 
+  int token_len = 0;
   int *start_ptr = &curr;
   int *end_ptr = &end;
+  
 
   find_start(start_ptr, input_length); // adjusts start to be 0th index of first arg (if any)
-  
+
   // set input_length to 0 if input is all spaces or tabs
   if (curr >= *input_length)
   {
     *input_length = 0; // No arguments
-    cmd_ptr->argv[0] = NULL;
-    return *cmd_ptr; // just doing this for now to avoid warnings
+    cmd -> argv[0] = NULL;
+    return; // just doing this for now to avoid warnings
   }
 
   // adds each token to the cmd struct as an argument
@@ -182,31 +184,33 @@ Command parse_command(int *input_length, char *delimiter)
     find_tkn_end(start_ptr, end_ptr, input_length);
 
     // Check if the token is '|' and handle accordingly
-    if (end - curr == 1 && (mystrcmp(&buffer[curr], "|") || mystrcmp(&buffer[curr], "<") ||
-                            mystrcmp(&buffer[curr], ">") || (mystrcmp(&buffer[curr], "&"))))
+    if (end - curr == 1 && (mystrcmp(&buffer[curr], "|") == 0 || mystrcmp(&buffer[curr], "<") == 0 ||
+                            mystrcmp(&buffer[curr], ">") == 0 || mystrcmp(&buffer[curr], "&") == 0))
     {
       *delimiter = buffer[curr];
-      return *cmd_ptr; // return to parse_pipeline
+      return; // return to parse_pipeline
     }
 
     // adds the token to the cmd struct as an argument
     int token_length = end - curr;
-    add_arg(cmd_ptr, token_length, start_ptr);
+    add_arg(cmd, token_length, start_ptr);
     
     // move to end of added token
     curr = end;
 
     // skip over spaces and tabs to the start of the next token (if any)
     find_start(start_ptr, input_length);
+    
   }
+  
+  cmd->argv[cmd->argc] = NULL;
 
-  return *cmd_ptr;
+  return;
 }
 
 void add_arg(Command *cmd, int token_length, int *start_ptr){
   if (token_length > 0)
     {
-      printf("cmd->argc is: %d\n", cmd->argc); //debugging
       if (cmd->argc < MAX_ARGS)
       {
         char *token = alloc(token_length + 1);
@@ -354,7 +358,6 @@ int isExit(const Command *cmd)
  */
 static void print_command(const Command *cmd)
 {
-  printf("argc=%d\n", cmd->argc);
   for (int i = 0; i < cmd->argc; i++)
   {
     printf("argv[%d] = \"%s\"\n", i, cmd->argv[i]);
@@ -367,19 +370,14 @@ static void print_command(const Command *cmd)
  * @param cmd  Parsed command structure (argv/argc).
  * @param envp Environment passed down from main.
  */
-void run_command(const Command *cmd, char *envp[])
+void run_command(Command *cmd, char *envp[])
 {
   char base_path[] = "/usr/bin/";
 
   if (cmd->argc == 0)
-    return; // no commands were sent
-
-  /** shouldn't this be happening in the main while loop?? */
-  // exit
-  /**if (mystrcmp(cmd->argv[0], "exit") == 0)
   {
-    _exit(0);
-  }*/
+    return; // no commands were sent
+  }
 
   pid_t pid = fork();
   if (pid < 0)
@@ -392,6 +390,7 @@ void run_command(const Command *cmd, char *envp[])
   if (pid == 0)
   {
     // Child doing some work
+    cmd->argv[cmd->argc] = NULL; // ensure argv is NULL-terminated
     char *full_path = mystrcat(cmd->argv[0], base_path); // appending argument 0 to base path "/user/bin/"
     execve(full_path, cmd->argv, envp);
 
