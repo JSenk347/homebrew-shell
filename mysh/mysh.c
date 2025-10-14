@@ -229,7 +229,6 @@ void parse_command(Command *cmd, int *input_index, int *input_length)
   int curr = *input_index /**0*/;
   int end = *input_index /**0*/;
   int token_len = 0;
-  int *end_ptr = &end;
   
   // adjusts start to be 0th index of next arg (if any)
   find_start(&curr, input_length);
@@ -246,7 +245,7 @@ void parse_command(Command *cmd, int *input_index, int *input_length)
   while (curr < *input_length)
   {
     // find the next space or tab char
-    find_tkn_end(&curr, end_ptr, input_length);
+    find_tkn_end(&curr, &end, input_length);
 
     // Check if the token is any of the special literals and handle accordingly
     if (end - curr == 1 && (mystrcmp(&buffer[curr], "|") == 0 ||
@@ -333,6 +332,7 @@ void find_tkn_end(int *start, int *end, int *input_length)
 // JOB EXECUTION FUNCTIONS
 void run_job(Job *job)
 {
+  //@todo
 }
 
 /**
@@ -359,20 +359,6 @@ int isExit(const Command *cmd)
     }
   }
   return 0;
-}
-
-/**
- * @brief This function prints the contents of a Command structure for
- *        debugging purposes.
- *
- * @param cmd A pointer to the Command structure to print
- */
-static void print_command(const Command *cmd)
-{
-  for (int i = 0; i < cmd->argc; i++)
-  {
-    printf("argv[%d] = \"%s\"\n", i, cmd->argv[i]);
-  }
 }
 
 /**
@@ -414,7 +400,24 @@ void run_command(Command *cmd, char *envp[])
   waitpid(pid, &status, 0);
 }
 
-// CURRENTLY UNUSED FUNCTIONS
+
+// DEBUGGING/TESTING FUNCTIONS
+/**
+ * @brief This function prints the contents of a Command structure for
+ *        debugging purposes.
+ *
+ * @param cmd A pointer to the Command structure to print
+ */
+static void print_command(const Command *cmd)
+{
+  for (int i = 0; i < cmd->argc; i++)
+  {
+    printf("argv[%d] = \"%s\"\n", i, cmd->argv[i]);
+  }
+}
+
+
+// GRAVEYARD OF CURRENTLY UNUSED FUNCTIONS
 /**
  * @brief This function parses the input buffer into arguments.
  *
