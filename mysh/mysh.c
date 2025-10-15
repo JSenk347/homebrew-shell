@@ -39,6 +39,7 @@ void parse_job(Job *job, int *input_index);
 void parse_pipeline(Job *job, int *input_index);
 void parse_command(Command *cmd, int *input_index, int *input_length);
 void add_arg(Command *cmd, int token_length, int *curr);
+void read_filename(Job *job, int *input_index, int *input_length, char type); //NEW
 void find_start(int *start, int *input_length);
 void find_tkn_end(int *start, int *end, int *input_length);
 int isExit(const Command *cmd);
@@ -150,32 +151,28 @@ void parse_job(Job *job, int *input_index)
   // populates job structure with commands and/or pipelines
   parse_pipeline(job, input_index);
 
-  /** will need to be built to handle input/output redirection and background
-  while (input_index < mystrlen(buffer))
+  //NEW////////////////////////////
+  // handle input/output redirection and background
+  if (buffer[*input_index] == '<')
   {
-    if (buffer[input_index] == '<')
-    {
-      // input redirection
-      input_index++;
-      job.infile_path =
-    }
-    else if (buffer[input_index] == '>')
-    {
-      // output redirection
-      input_index++;
-      job.outfile_path =
-    }
-    else if (buffer[input_index] == '&')
-    {
-      input_index++;
-      job.is_background = TRUE;
-    }
-    else
-    {
-      input_index++;
-    }
-  }*/
-
+    // input redirection
+    input_index++; // move over '<'
+    read_filename(job, input_index, &input_length, '<'); //updates job->infile_path
+    return;
+  }
+  else if (buffer[*input_index] == '>')
+  {
+    // output redirection
+    input_index++; // move over '>'
+    read_filename(job, input_index, &input_length, '>'); //updates job->outfile_path
+    return;
+  }
+  else if (buffer[*input_index] == '&')
+  {
+    input_index++; // move over '&'
+    job->is_background = TRUE;
+  }
+  //////////////////////////////
   return;
 }
 
@@ -193,11 +190,10 @@ void parse_pipeline(Job *job, int *input_index)
 {
   Command cmd;
   int input_length = mystrlen(buffer); // length of full input
-  // char delimiter = FALSE;
 
   // parses input into tokens for first command
   parse_command(&cmd, input_index, &input_length);
-  job->pipeline[job->num_stages] = cmd;        // add first command to job
+  job->pipeline[job->num_stages] = cmd; // add first command to job
   job->num_stages++;
 
   while (buffer[*input_index] == '|')
@@ -229,7 +225,7 @@ void parse_command(Command *cmd, int *input_index, int *input_length)
   int curr = *input_index /**0*/;
   int end = *input_index /**0*/;
   int token_len = 0;
-  
+
   // adjusts start to be 0th index of next arg (if any)
   find_start(&curr, input_length);
 
@@ -276,8 +272,16 @@ void parse_command(Command *cmd, int *input_index, int *input_length)
   return;
 }
 
+ /**
+  * @brief Adds a token of specified length from the input buffer to the command's
+  *        argument list if the token length is greater than zero and the maximum
+  *        number of arguments has not been exceeded.
+  * @param cmd A pointer to a Command structure to store the parsed arguments.
+  * @param token_length The length of the token to add.
+  * @param curr A pointer to the current index in the input buffer.
+  */
 void add_arg(Command *cmd, int token_length, int *curr)
-{  
+{
   if (token_length > 0)
   {
     if (cmd->argc < MAX_ARGS)
@@ -296,6 +300,45 @@ void add_arg(Command *cmd, int token_length, int *curr)
     }
   }
 }
+
+//NEW/////////////////////
+/**
+ * @brief This function reads the next token from the input buffer
+ *       and assigns it to the appropriate file path in the Job structure.
+ * 
+ * @param job A pointer to a Job structure to store the parsed file path.
+ * @param input_index A pointer to an integer representing the current index in
+ *        the input buffer.
+ * @param input_length A pointer to an integer representing the length of the
+ *        command line imput.
+ * @param type A char indicating whether the filename is for input ('<')
+ *        or output ('>') redirection.  
+ */
+void read_filename(Job *job, int *input_index, int *input_length, char type) {
+  int start;
+  int end;
+  int fname_length;
+  char *filename;
+
+  find_start(input_index, input_length); // skips any leading whitespace
+  start = *input_index;
+
+  find_tkn_end(input_index, &end, input_length); // finds the end of the filename token
+
+  fname_length = end - start;
+  filename = alloc(fname_length + 1); // allocate memory for filename
+  for (int i = 0; i < fname_length; i++) {
+    filename[i] = buffer[start + i];
+  }
+
+  if (type == '<') {
+    job->infile_path = filename; // set input file path
+  } else if (type == '>') {
+    job->outfile_path = filename; // set output file path
+  }
+return;
+}
+////////////////////////
 
 /**
  * @brief Skip over initial white space until a non-white space char is found.
@@ -327,7 +370,6 @@ void find_tkn_end(int *start, int *end, int *input_length)
     (*end)++;
   }
 }
-
 
 // JOB EXECUTION FUNCTIONS
 void run_job(Job *job)
@@ -400,7 +442,6 @@ void run_command(Command *cmd, char *envp[])
   waitpid(pid, &status, 0);
 }
 
-
 // DEBUGGING/TESTING FUNCTIONS
 /**
  * @brief This function prints the contents of a Command structure for
@@ -415,7 +456,6 @@ static void print_command(const Command *cmd)
     printf("argv[%d] = \"%s\"\n", i, cmd->argv[i]);
   }
 }
-
 
 // GRAVEYARD OF CURRENTLY UNUSED FUNCTIONS
 /**
