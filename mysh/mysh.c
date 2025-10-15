@@ -2,7 +2,8 @@
  * Summary: Contains the main function for a simple shell program.
  *
  * Current functionality: Runs the shell loop - prompts user for command,
- *    execve fails every time, exit works.
+ *    can run jobs with single stages/commands (no pipes, redirection, or
+ *    background)
  *
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
  * @file: mysh.c
@@ -16,6 +17,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#define MAX_CHAR 300
 #include <sys/stat.h>
 #include <fcntl.h>
 #define MAX_TOKENS 300
@@ -25,24 +27,27 @@
 #define TRUE 1
 #define FALSE 0
 
-char buffer[MAX_TOKENS]; // Global Buffer
+char buffer[MAX_CHAR]; // Global Buffer
 static void print_command(const Command *cmd);
-Command commands[MAX_COMMANDS];
-Job all_jobs[MAX_JOBS]; // Array to hold all jobs;
+Command commands[MAX_COMMANDS]; // array of commands
+Job all_jobs[MAX_JOBS];         // Array to hold all jobs;
 
 // STRUCTURES
 struct Job job1;
 
 // FUNCTION PROTOTYPES
-Command get_command();
-void read_input(/*char *buffer, */ int *input_length);
-void parse_pipeline(int *input_length, char *delimiter);
-void parse_command(Command *cmd, int *input_length, char *delimiter);
-void add_arg(Command *cmd, int token_length, int *start_ptr); /*trying this out ARR*/
+Job get_job();
+void read_input(int *input_length);
+void parse_job(Job *job, int *input_index);
+void parse_pipeline(Job *job, int *input_index);
+void parse_command(Command *cmd, int *input_index, int *input_length);
+void add_arg(Command *cmd, int token_length, int *curr);
+void read_filename(Job *job, int *input_index, int *input_length, char type); //NEW
 void find_start(int *start, int *input_length);
 void find_tkn_end(int *start, int *end, int *input_length);
 int isExit(const Command *cmd);
 void run_command(Command *cmd, char *envp[]);
+// Command get_command(); // WILL BE REPLACED BY GET_JOB()
 pid_t execute_command(Command *cmd, char *envp[], int fd_in, int fd_out);
 // void tokenize(/*char *buffer,*/ int *input_length, Command *cmd); - ARR
 // int check_exit(char *buffer, int *input_length); not in use - ARR
@@ -65,47 +70,53 @@ struct Job eg2 = {
 
 int main(int argc, char *argv[], char *envp[])
 {
-  Command cmd = get_command();
+  Job job = get_job();
 
-  while (!isExit(&cmd))
+  while (!isExit(/**&cmd*/ &job.pipeline[0]))
   {
-    run_command(&cmd, envp);
-    cmd = get_command();
+    // run_job(&job);
+    run_command(&job.pipeline[0], envp); // will be replaced by run_job()
+    job = get_job();
   }
   return 0;
 }
 
-// HELPER FUNCTIONS
+// INPUT READ/STORE FUNCTIONS
 /**
  * @brief This function prompts the user for input, reads the input from
- *        the keyboard, creates a command structure, and parses it into
- *        the Command structure.
+ *        the keyboard, creates a Job structure, and parses the input into
+ *        the Job structure.
  *
- * @param cmd A pointer to a Command structure to store the parsed command.
+ * @return Job A Job structure to store the parsed job.
  */
-Command get_command()
+Job get_job()
 {
-  Command cmd;
-  Command *cmd_ptr = &cmd;
+  // initialize job
+  Job job;
+  job.num_stages = 0;
+  job.infile_path = NULL;
+  job.outfile_path = NULL;
+  job.is_background = FALSE;
+
+  Job *job_ptr = &job;
   int input_length = 0;
+  int input_index = 0;
 
-  write(1, "$ ", 2); // prompt
-
+  write(1, "$ ", 2);         // prompt
   read_input(&input_length); // read command line into buffer
   free_all();
-  //Job job = parse_job();
-  parse_command(cmd_ptr, &input_length, ""); // will evntually be replaced by parse_job()
-  /**tokenize(/*buffer, &input_length, cmd); // parse input into arguments*/
+  parse_job(job_ptr, &input_index); // parse buffer into job
   free_all();
 
-  return cmd;
+  return job;
 }
 
 /**
  * @brief This function prompts the user for input and then reads the input
- *          from the keyboard into the buffer.
+ *        from the keyboard into the buffer.
  *
- * @param input_length A pointer to an integer to store the length of the input string.
+ * @param input_length A pointer to an integer to store the length of the input
+ *        string.
  */
 void read_input(int *input_length)
 {
@@ -115,7 +126,7 @@ void read_input(int *input_length)
 
   // loads input into buffer
   n = read(0, &c, 1); // reads 1 char from the input stream into c
-  while (n > 0 && c != '\n' && i < MAX_TOKENS - 1)
+  while (n > 0 && c != '\n' && i < MAX_CHAR - 1)
   {
     buffer[i++] = c;
     n = read(0, &c, 1);
@@ -127,101 +138,153 @@ void read_input(int *input_length)
 }
 
 /**
- * @brief
+ * @brief This function parses the buffer which holds the full command line
+ *        into a Job so the Job can tell the shell how many commands to run,
+ *        what each command's arguments are, whether to connect commands with
+ *        pipes, where to send input/output, and whether to run the command in
+ *        the background.
  *
- * @param
- * @return Job
+ * @param job A pointer to a Job structure which stores the parsed job.
+ * @param input_index A pointer to an integer representing the current index in
+ *        the input buffer.
  */
-Job parse_job()
+void parse_job(Job *job, int *input_index)
 {
-  // initialize job
-  Job job;
-  job.num_stages = 0;
-  job.infile_path = NULL;
-  job.outfile_path = NULL;
-  job.is_background = FALSE;
-  int input_index = 0;
-
-  char delimiter = FALSE;
   int input_length = mystrlen(buffer);
 
-  // Parse the pipeline section
-}
+  // populates job structure with commands and/or pipelines
+  parse_pipeline(job, input_index);
 
-/**
- * @brief This function parses the
- *
- * @param input_length A pointer to an integer representing the length of the command line input.
- */
-void parse_pipeline(int *input_length, char *delimiter)
-{
-  Command write_cmd;
-  Command read_cmd;
-
-  parse_command(&write_cmd, input_length, delimiter);
-  if (*delimiter == '|') // will need to change to loop if we want 3+ commands in pipeline
+  //NEW////////////////////////////
+  // handle input/output redirection and background
+  if (buffer[*input_index] == '<')
   {
-    parse_command(&read_cmd, input_length, delimiter);
+    // input redirection
+    input_index++; // move over '<'
+    read_filename(job, input_index, &input_length, '<'); //updates job->infile_path
+    return;
   }
+  else if (buffer[*input_index] == '>')
+  {
+    // output redirection
+    input_index++; // move over '>'
+    read_filename(job, input_index, &input_length, '>'); //updates job->outfile_path
+    return;
+  }
+  else if (buffer[*input_index] == '&')
+  {
+    input_index++; // move over '&'
+    job->is_background = TRUE;
+  }
+  //////////////////////////////
   return;
 }
 
 /**
- * @brief This function parses the input buffer into commands.
+ * @brief Builds a sequence of command structures representing a pipeline of
+ *        commands as long as the next symbol after each command is the char
+ *        literal '|'.
  *
- * @param input_length A pointer to an integer representing the length of the command line imput.
- * @return Command
+ * @param job A pointer to a Job structure to store the parsed pipeline
+ *        commands.
+ * @param input_index A pointer to an integer representing the current index in
+ *        the input buffer.
  */
-void parse_command(Command *cmd, int *input_length, char *delimiter)
+void parse_pipeline(Job *job, int *input_index)
+{
+  Command cmd;
+  int input_length = mystrlen(buffer); // length of full input
+
+  // parses input into tokens for first command
+  parse_command(&cmd, input_index, &input_length);
+  job->pipeline[job->num_stages] = cmd; // add first command to job
+  job->num_stages++;
+
+  while (buffer[*input_index] == '|')
+  {
+    // continue parsing next command in pipeline
+    (*input_index)++; // move over '|'
+    parse_command(&cmd, input_index, &input_length);
+    job->pipeline[job->num_stages] = cmd; // add next command to job
+    job->num_stages++;
+  }
+
+  return;
+}
+
+/**
+ * @brief This function parses the input buffer into commands by extracting
+ *        each token until either one of the char literals '<', '>', '|', or
+ *        '&', or the end of line is reached.
+ *
+ * @param cmd A pointer to a Command structure to store the parsed arguments.
+ * @param input_index A pointer to an integer representing the current index in
+ *        the input buffer.
+ * @param input_length A pointer to an integer representing the length of the
+ *        command line imput.
+ */
+void parse_command(Command *cmd, int *input_index, int *input_length)
 {
   cmd->argc = 0;
-  int curr = 0;
-  int end = 0;
+  int curr = *input_index /**0*/;
+  int end = *input_index /**0*/;
   int token_len = 0;
-  int *start_ptr = &curr;
-  int *end_ptr = &end;
 
-  find_start(start_ptr, input_length); // adjusts start to be 0th index of first arg (if any)
+  // adjusts start to be 0th index of next arg (if any)
+  find_start(&curr, input_length);
 
-  // set input_length to 0 if input is all spaces or tabs
+  // checks if input is entirely whitespace
   if (curr >= *input_length)
   {
     *input_length = 0; // No arguments
     cmd->argv[0] = NULL;
-    return; // just doing this for now to avoid warnings
+    return;
   }
 
   // adds each token to the cmd struct as an argument
   while (curr < *input_length)
   {
     // find the next space or tab char
-    find_tkn_end(start_ptr, end_ptr, input_length);
+    find_tkn_end(&curr, &end, input_length);
 
-    // Check if the token is '|' and handle accordingly
-    if (end - curr == 1 && (mystrcmp(&buffer[curr], "|") == 0 || mystrcmp(&buffer[curr], "<") == 0 ||
-                            mystrcmp(&buffer[curr], ">") == 0 || mystrcmp(&buffer[curr], "&") == 0))
+    // Check if the token is any of the special literals and handle accordingly
+    if (end - curr == 1 && (mystrcmp(&buffer[curr], "|") == 0 ||
+                            mystrcmp(&buffer[curr], "<") == 0 ||
+                            mystrcmp(&buffer[curr], ">") == 0 ||
+                            mystrcmp(&buffer[curr], "&") == 0))
     {
-      *delimiter = buffer[curr];
-      return; // return to parse_pipeline
+
+      *input_index = curr; // updates input_index to the current position in buffer
+      return;              // return to parse_pipeline
     }
 
     // adds the token to the cmd struct as an argument
     int token_length = end - curr;
-    add_arg(cmd, token_length, start_ptr);
+    add_arg(cmd, token_length, &curr);
 
     // move to end of added token
     curr = end;
+    *input_index = curr;
 
     // skip over spaces and tabs to the start of the next token (if any)
-    find_start(start_ptr, input_length);
+    find_start(&curr, input_length);
   }
 
   cmd->argv[cmd->argc] = NULL;
+  *input_index = curr; // updates input_index to the current position in buffer
 
   return;
 }
 
-void add_arg(Command *cmd, int token_length, int *start_ptr)
+ /**
+  * @brief Adds a token of specified length from the input buffer to the command's
+  *        argument list if the token length is greater than zero and the maximum
+  *        number of arguments has not been exceeded.
+  * @param cmd A pointer to a Command structure to store the parsed arguments.
+  * @param token_length The length of the token to add.
+  * @param curr A pointer to the current index in the input buffer.
+  */
+void add_arg(Command *cmd, int token_length, int *curr)
 {
   if (token_length > 0)
   {
@@ -230,7 +293,7 @@ void add_arg(Command *cmd, int token_length, int *start_ptr)
       char *token = alloc(token_length + 1);
       for (int i = 0; i < token_length; i++)
       {
-        token[i] = buffer[*start_ptr + i];
+        token[i] = buffer[*curr + i];
       }
       token[token_length] = '\0';
       cmd->argv[cmd->argc++] = token;
@@ -241,6 +304,45 @@ void add_arg(Command *cmd, int token_length, int *start_ptr)
     }
   }
 }
+
+//NEW/////////////////////
+/**
+ * @brief This function reads the next token from the input buffer
+ *       and assigns it to the appropriate file path in the Job structure.
+ * 
+ * @param job A pointer to a Job structure to store the parsed file path.
+ * @param input_index A pointer to an integer representing the current index in
+ *        the input buffer.
+ * @param input_length A pointer to an integer representing the length of the
+ *        command line imput.
+ * @param type A char indicating whether the filename is for input ('<')
+ *        or output ('>') redirection.  
+ */
+void read_filename(Job *job, int *input_index, int *input_length, char type) {
+  int start;
+  int end;
+  int fname_length;
+  char *filename;
+
+  find_start(input_index, input_length); // skips any leading whitespace
+  start = *input_index;
+
+  find_tkn_end(input_index, &end, input_length); // finds the end of the filename token
+
+  fname_length = end - start;
+  filename = alloc(fname_length + 1); // allocate memory for filename
+  for (int i = 0; i < fname_length; i++) {
+    filename[i] = buffer[start + i];
+  }
+
+  if (type == '<') {
+    job->infile_path = filename; // set input file path
+  } else if (type == '>') {
+    job->outfile_path = filename; // set output file path
+  }
+return;
+}
+////////////////////////
 
 /**
  * @brief Skip over initial white space until a non-white space char is found.
@@ -271,6 +373,12 @@ void find_tkn_end(int *start, int *end, int *input_length)
   {
     (*end)++;
   }
+}
+
+// JOB EXECUTION FUNCTIONS
+void run_job(Job *job)
+{
+  //@todo
 }
 
 /**
@@ -470,7 +578,22 @@ void run_command(Command *cmd, char *envp[])
   waitpid(pid, &status, 0);
 }
 
-// CURRENTLY UNUSED FUNCTIONS
+// DEBUGGING/TESTING FUNCTIONS
+/**
+ * @brief This function prints the contents of a Command structure for
+ *        debugging purposes.
+ *
+ * @param cmd A pointer to the Command structure to print
+ */
+static void print_command(const Command *cmd)
+{
+  for (int i = 0; i < cmd->argc; i++)
+  {
+    printf("argv[%d] = \"%s\"\n", i, cmd->argv[i]);
+  }
+}
+
+// GRAVEYARD OF CURRENTLY UNUSED FUNCTIONS
 /**
  * @brief This function parses the input buffer into arguments.
  *
@@ -555,3 +678,27 @@ int check_exit(char *buffer, int *input_length) {
   return 0;
 }
  */
+
+/** REPLACED WITH GET_JOB()
+ * @brief This function prompts the user for input, reads the input from
+ *        the keyboard, creates a command structure, and parses it into
+ *        the Command structure.
+ *
+ * @param cmd A pointer to a Command structure to store the parsed command.
+ */
+/**Command get_command()
+{
+  Command cmd;
+  Command *cmd_ptr = &cmd;
+  int input_length = 0;
+
+  write(1, "$ ", 2); // prompt
+
+  read_input(&input_length); // read command line into buffer
+  free_all();
+  parse_command(cmd_ptr, &input_length, "");
+  //tokenize(/*buffer, &input_length, cmd); // parse input into arguments
+  free_all();
+
+  return cmd;
+}*/
