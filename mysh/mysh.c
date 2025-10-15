@@ -18,6 +18,9 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #define MAX_CHAR 300
+#include <sys/stat.h>
+#include <fcntl.h>
+#define MAX_TOKENS 300
 #define MAX_ARGS 10
 #define MAX_JOBS 10
 #define MAX_COMMANDS 10
@@ -45,6 +48,7 @@ void find_tkn_end(int *start, int *end, int *input_length);
 int isExit(const Command *cmd);
 void run_command(Command *cmd, char *envp[]);
 // Command get_command(); // WILL BE REPLACED BY GET_JOB()
+pid_t execute_command(Command *cmd, char *envp[], int fd_in, int fd_out);
 // void tokenize(/*char *buffer,*/ int *input_length, Command *cmd); - ARR
 // int check_exit(char *buffer, int *input_length); not in use - ARR
 
@@ -401,6 +405,138 @@ int isExit(const Command *cmd)
     }
   }
   return 0;
+}
+
+/**
+ * @brief This function prints the contents of a Command structure for
+ *        debugging purposes.
+ *
+ * @param cmd A pointer to the Command structure to print
+ */
+static void print_command(const Command *cmd)
+{
+  for (int i = 0; i < cmd->argc; i++)
+  {
+    printf("argv[%d] = \"%s\"\n", i, cmd->argv[i]);
+  }
+}
+
+/**
+ * @brief Executes a Job, handling I/O redirection and backgrounding.
+ * Currently supports single-stage jobs only.
+ *
+ * @param job  Job structure containing the pipeline and metadata.
+ * @param envp Environment passed down from main.
+ */
+void run_job(Job *job, char *envp[])
+{
+  // Only handling single-stage jobs for now
+  if (job->num_stages != 1)
+  {
+    write(2, "Pipeline or empty job not yet supported.\n", 41);
+    return;
+  }
+
+  Command *cmd = &job->pipeline[0];
+  int input_fd = 0;
+  int output_fd = 1;
+  int pid;
+
+  // redirecting input
+  if (job->infile_path != NULL)
+  {
+    input_fd = open(job->infile_path, O_RDONLY);
+    if (input_fd == -1)
+    {
+      write(2, "error opening input file\n", 25);
+      return; 
+    }
+  }
+  // redirecting output
+  if (job->outfile_path != NULL)
+  {
+    // O_TRUNC clears the file, 0644 are standard permissions
+    output_fd = open(job->outfile_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (output_fd == -1)
+    {
+      write(2, "error opening output file\n", 25);
+      if (input_fd != 0)
+        close(input_fd);
+      return; 
+    }
+  }
+  // execute the single command
+  pid = execute_command(cmd, envp, input_fd, output_fd);
+
+  // Close file descriptors opened in the parent
+  if (input_fd != 0)
+    close(input_fd);
+  if (output_fd != 1)
+    close(output_fd);
+
+  // b. Waiting (Background vs. Foreground)
+  if (pid != -1)
+  {
+    if (job->is_background == TRUE)
+    {
+      // Background job: Parent returns immediately
+      // You would typically track this job here.
+      printf("mysh: Background PID [%d]\n", pid);
+    }
+    else
+    {
+      // Foreground job: Parent must wait
+      int status;
+      waitpid(pid, &status, 0);
+    }
+  }
+}
+
+pid_t execute_command(Command *cmd, char *envp[], int fd_in, int fd_out)
+{
+  char base_path[] = "/usr/bin/";
+
+  if (cmd->argc == 0)
+  {
+    return -1; // No command to execute
+  }
+
+  pid_t pid = fork();
+  if (pid < 0)
+  {
+    // error
+    write(2, "fork failed\n", 12);
+    return -1;
+  }
+
+  if (pid == 0)
+  {
+    // Child doing some work
+    // Set up I/O redirection for this stage
+    if (fd_in != 0)
+    {
+      dup2(fd_in, 0);
+      close(fd_in);
+    }
+    if (fd_out != 1)
+    {
+      dup2(fd_out, 1);
+      close(fd_out);
+    }
+
+    // Prepare and execute the command
+    cmd->argv[cmd->argc] = NULL;                         // ensure argv is null terminated
+    char *full_path = mystrcat(cmd->argv[0], base_path); // appending argument 0 to base path "/user/bin/"
+
+    execve(full_path, cmd->argv, envp);
+
+    // execve only returns on error
+    write(2, "execve failed\n", 14);
+    _exit(1); // Exit child process on execution failure
+  }
+
+  // Parent returns the PID
+  return pid;
 }
 
 /**
