@@ -1,7 +1,7 @@
-mysh: mysh.o mystring.o myheap.o
-	gcc mysh.o mystring.o myheap.o -o mysh
+mysh: mysh.o mystring.o myheap.o commands.o
+	gcc mysh.o mystring.o myheap.o commands.o -o mysh
 
-mysh.o: mysh.c mystring.h jobs.h
+mysh.o: mysh.c mystring.h jobs.h mysh.h commands.h
 	gcc -c mysh.c
 
 mystring.o: mystring.c mystring.h
@@ -9,6 +9,9 @@ mystring.o: mystring.c mystring.h
 
 myheap.o: myheap.c myheap.h
 	gcc -c myheap.c
+
+commands.o: commands.c commands.h mysh.h jobs.h mystring.h myheap.h
+	gcc -c commands.c
 
 clean:
 	/usr/bin/rm -f *.o mysh
