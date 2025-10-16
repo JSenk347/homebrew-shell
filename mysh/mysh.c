@@ -1,248 +1,193 @@
+// path: src/mysh.c
 /**
- * Summary: Contains the main function for a simple shell program.
+ * Summary: Simple shell (mysh) that supports pipes (|), redirection (<, >),
+ *          and background (&).
  *
- * Current functionality: Runs the shell loop - prompts user for command,
- *    execve fails every time, exit works.
+ * Command format (simple rules):
+ *   cmd args... [ '|' cmd args... ]... [ '<' infile ] [ '>' outfile ] [ '&' ]
+ * - Words are split by spaces or tabs.
+ * - Special symbols | < > & must have spaces around them.
+ * - '<' and '>' apply to the whole pipeline.
+ * - '&' must be last.
  *
- * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
- * @file: mysh.c
+ * Memory: uses myheap. We reset it BEFORE parsing a line and AFTER running it.
+ *
+ * Authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
  */
 
 #include "mystring.h"
 #include "jobs.h"
 #include "myheap.h"
-#include <stdio.h>
-#include <string.h>
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#define MAX_TOKENS 300
-#define MAX_ARGS 10
-#define MAX_JOBS 10
-#define MAX_COMMANDS 10
-#define TRUE 1
-#define FALSE 0
+#include <sys/stat.h>
+#include <fcntl.h>
+ 
+#define MAX_CHAR       300
+#define MAX_ARGS       10
+#define MAX_JOBS       10
+#define MAX_COMMANDS   10
+#define TRUE           1
+#define FALSE          0
 
-char buffer[MAX_TOKENS]; // Global Buffer
-int buffer_index = 0; // will probably need this
-static void print_command(const Command *cmd);
-Command commands[MAX_COMMANDS];
-Job all_jobs[MAX_JOBS]; // Array to hold all jobs;
+// Globals
+char buffer[MAX_CHAR];  // input buffer
+
+// Prototypes
+static void write_str(int file, const char *s);
 void slay_zombies();
-// STRUCTURES
-struct Job job1;
 
-// FUNCTION PROTOTYPES
-Command get_command();
-void read_input(/*char *buffer, */ int *input_length);
-void parse_pipeline(int *input_length, char *delimiter);
-void parse_command(Command *cmd, int *input_length, char *delimiter);
-void add_arg(Command *cmd, int token_length, int *start_ptr); /*trying this out ARR*/
-void find_start(int *start, int *input_length);
-void find_tkn_end(int *start, int *end, int *input_length);
-int isExit(const Command *cmd);
-void run_command(Command *cmd, char *envp[]);
-static int is_space(char c){ return c==' ' || c=='\t'; }
-static int is_special(char c){ return c=='|' || c=='<' || c=='>' || c=='&'; }
-// void tokenize(/*char *buffer,*/ int *input_length, Command *cmd); - ARR
-// int check_exit(char *buffer, int *input_length); not in use - ARR
+void prompt();
+static int  is_space(char c);
+static int  is_special(char c);
+static char *copy_token_from_buffer(int start, int end);
+static char *resolve_path(const char *cmd);
 
-// TEST INSTANCES OF JOB/////////////////////////
-struct Job eg1 = {
-    {{{"ls", "-al", "/library", NULL}, 3}},
-    1,
-    NULL,
-    NULL,
-    0};
-struct Job eg2 = {
-    {{{"ls", "-al", "/library", NULL}, 3},
-     {{"wc", "-l", NULL}, 2}},
-    2,
-    "dirlistlen",
-    NULL,
-    1};
-/////////////////////////////////////////////////
+static void read_input(int *input_length);
 
-int main(int argc, char *argv[], char *envp[])
-{
-  Command cmd = get_command();
+static void find_start(int *start, int *input_length);
+static void find_tkn_end(int *start, int *end, int *input_length);
 
-  while (!isExit(&cmd))
-  {
-    
-    run_command(&cmd, envp);
-    cmd = get_command();
+static void add_arg(Command *cmd, int token_length, int *curr);
+
+static void parse_command(Command *cmd, int *input_index, int *input_length);
+static void parse_pipeline(Job *job, int *input_index);
+static void parse_job(Job *job, int *input_index);
+
+pid_t start_child(Command *cmd, int file_in, int file_out, char *envp[]);
+static void run_job(Job *job, char *envp[]);
+static void run_command(Command *cmd, char *envp[]);
+
+int  isExit(const Command *cmd);
+Job  get_job();
+
+// Small helpers (implementations)
+
+/**
+ * @brief Write a C string to a file descriptor.
+ * @param file  Destination file descriptor.
+ * @param s   NUL-terminated string.
+ */
+static void write_str(int file, const char *s) {
+  write(file, s, (unsigned int)mystrlen(s));
+}
+
+/**
+ * @brief Check if a char is space or tab.
+ * @param c   Character.
+ * @return non-zero if space or tab, else 0.
+ */
+static int is_space(char c) { return c==' ' || c=='\t'; }
+
+/**
+ * @brief Check if a char is one of | < > &.
+ * @param c   Character.
+ * @return non-zero if special, else 0.
+ */
+static int is_special(char c) { return c=='|' || c=='<' || c=='>' || c=='&'; }
+
+/**
+ * @brief Copy text [start, end) from the global buffer.
+ * @param start  Inclusive index in buffer.
+ * @param end    Exclusive index in buffer.
+ * @return heap string (myheap) with NUL terminator.
+ */
+static char *copy_token_from_buffer(int start, int end) {
+  int len = end - start;
+  char *s = alloc((unsigned int)len + 1);
+  for (int i = 0; i < len; i++) s[i] = buffer[start + i];
+  s[len] = '\0';
+  return s;
+}
+
+/**
+ * @brief Turn argv[0] into an absolute path.
+ *        If it has '/', use it as-is (copied). Otherwise use "/usr/bin/<cmd>".
+ * @param cmd  Command name.
+ * @return heap string (myheap) path.
+ */
+static char *resolve_path(const char *cmd) {
+  for (int i = 0; cmd[i] != '\0'; i++) {
+    if (cmd[i] == '/') {
+      unsigned int L = mystrlen(cmd);
+      char *p = alloc(L + 1);
+      for (unsigned int j = 0; j < L; j++) p[j] = cmd[j];
+      p[L] = '\0';
+      return p;
+    }
+  }
+  const char *base = "/usr/bin/";
+  unsigned int Lb = mystrlen(base);
+  unsigned int Lc = mystrlen(cmd);
+  char *dst = alloc(Lb + Lc + 1);
+  mystrcpy(base, dst);
+  mystrcat(cmd, dst);
+  return dst;
+}
+void prompt(){ write(1, "$ ", 2); }
+
+// Main
+
+int main(int argc, char *argv[], char *envp[]) {
+  while (1) {
+    Job job = get_job();
+    if (job.num_stages == 0) continue;   // empty line
+    if (isExit(&job.pipeline[0])) break; // exit/Exit/EXIT
+    run_job(&job, envp);
+    free_all();                          // free tokens from last run
   }
   return 0;
 }
 
-// HELPER FUNCTIONS
-/**
- * @brief This function prompts the user for input, reads the input from
- *        the keyboard, creates a command structure, and parses it into
- *        the Command structure.
- *
- * @param cmd A pointer to a Command structure to store the parsed command.
- */
-Command get_command()
-{
-  Command cmd;
-  Command *cmd_ptr = &cmd;
-  int input_length = 0;
-  slay_zombies();
-  write(1, "$ ", 2); // prompt
-
-  read_input(&input_length); // read command line into buffer
-  free_all();
-  // parse_job() will go here ?
-  char delim = 0;
-  parse_command(cmd_ptr, &input_length, &delim); // will evntually be replaced by parse_job()
-  /**tokenize(/*buffer, &input_length, cmd); // parse input into arguments*/
-  free_all();
-
-  return cmd;
-}
+// Input
 
 /**
- * @brief This function prompts the user for input and then reads the input
- *          from the keyboard into the buffer.
- *
- * @param input_length A pointer to an integer to store the length of the input string.
+ * @brief Read one line from stdin into buffer (no newline kept).
+ * @param input_length  Out: number of chars stored (no NUL).
  */
-void read_input(int *input_length)
-{
-  char c;
-  int i = 0;
-  int n;
-
-  // loads input into buffer
-  n = read(0, &c, 1); // reads 1 char from the input stream into c
-  while (n > 0 && c != '\n' && i < MAX_TOKENS - 1)
-  {
+static void read_input(int *input_length) {
+  char c; int i = 0;
+  int n = read(0, &c, 1);
+  while (n > 0 && c != '\n' && i < MAX_CHAR - 1) {
     buffer[i++] = c;
     n = read(0, &c, 1);
   }
-
   buffer[i] = '\0';
   *input_length = i;
-  return;
 }
 
 /**
- * @brief 
+/**
+ * @brief This function prompts the user for input, reads the input from
+ *        the keyboard, creates a Job structure, and parses the input into
+ *        the Job structure.
  *
- * @param
- * @return Job 
+ * @return Job A Job structure to store the parsed job.
  */
-Job parse_job(){
-  // initialize job
+
+Job get_job() {
+  slay_zombies();             // slay those pesky zombies
+  prompt();
+
+  int input_length = 0;
+  int input_index  = 0;
+
+  read_input(&input_length);
+  free_all();                 // reset heap before parsing
+
   Job job;
-  job.num_stages = 0;
-  job.infile_path = NULL;
-  job.outfile_path = NULL;
+  job.num_stages    = 0;
+  job.infile_path   = NULL;
+  job.outfile_path  = NULL;
   job.is_background = FALSE;
-  int input_index = 0;
 
-  char delimiter = 0;
-  int input_length = mystrlen(buffer);
-  
-  //Parse the pipeline section
-  
+  parse_job(&job, &input_index);
+  return job;
 }
 
-/**
- * @brief This function parses the
- *
- * @param input_length A pointer to an integer representing the length of the command line input.
- */
-void parse_pipeline(int *input_length, char *delimiter)
-{
-  Command write_cmd;
-  Command read_cmd;
-
-  parse_command(&write_cmd, input_length, delimiter);
-  if (*delimiter == '|') // will need to change to loop if we want 3+ commands in pipeline
-  {
-    parse_command(&read_cmd, input_length, delimiter);
-  }
-  return;
-}
-
-/**
- * @brief This function parses the input buffer into commands.
- *
- * @param input_length A pointer to an integer representing the length of the command line imput.
- * @return Command
- */
-void parse_command(Command *cmd, int *input_length, char *delimiter)
-{
-  cmd->argc = 0;
-  int curr = 0;
-  int end = 0;
-  int token_len = 0;
-  int *start_ptr = &curr;
-  int *end_ptr = &end;
-
-  find_start(start_ptr, input_length); // adjusts start to be 0th index of first arg (if any)
-
-  // set input_length to 0 if input is all spaces or tabs
-  if (curr >= *input_length)
-  {
-    *input_length = 0; // No arguments
-    cmd->argv[0] = NULL;
-    return; // just doing this for now to avoid warnings
-  }
-
-  // adds each token to the cmd struct as an argument
-  while (curr < *input_length)
-  {
-    // find the next space or tab char
-    find_tkn_end(start_ptr, end_ptr, input_length);
-
-    // Check if the token is '|' and handle accordingly
-    if (end - curr == 1 && (mystrcmp(&buffer[curr], "|") == 0 || mystrcmp(&buffer[curr], "<") == 0 ||
-                            mystrcmp(&buffer[curr], ">") == 0 || mystrcmp(&buffer[curr], "&") == 0))
-    {
-      *delimiter = buffer[curr];
-      return; // return to parse_pipeline
-    }
-
-    // adds the token to the cmd struct as an argument
-    int token_length = end - curr;
-    add_arg(cmd, token_length, start_ptr);
-
-    // move to end of added token
-    curr = end;
-
-    // skip over spaces and tabs to the start of the next token (if any)
-    find_start(start_ptr, input_length);
-  }
-
-  cmd->argv[cmd->argc] = NULL;
-
-  return;
-}
-
-void add_arg(Command *cmd, int token_length, int *start_ptr)
-{
-  if (token_length > 0)
-  {
-    if (cmd->argc < MAX_ARGS)
-    {
-      char *token = alloc(token_length + 1);
-      for (int i = 0; i < token_length; i++)
-      {
-        token[i] = buffer[*start_ptr + i];
-      }
-      token[token_length] = '\0';
-      cmd->argv[cmd->argc++] = token;
-    }
-    else
-    {
-      write(2, "Too many args\n", 14);
-    }
-  }
-}
+// Parsing
 
 /**
  * @brief Skip over initial white space until a non-white space char is found.
@@ -250,12 +195,8 @@ void add_arg(Command *cmd, int token_length, int *start_ptr)
  * @param start Pointer to the starting index to modify.
  * @param input_length The total length of the input buffer.
  */
-void find_start(int *start, int *input_length)
-{
-  while (*start < *input_length && (buffer[*start] == ' ' || buffer[*start] == '\t'))
-  {
-    (*start)++;
-  }
+static void find_start(int *start, int *input_length) {
+  while (*start < *input_length && is_space(buffer[*start])) (*start)++;
 }
 
 /**
@@ -266,14 +207,328 @@ void find_start(int *start, int *input_length)
  * @param end Pointer to the ending index of the token to modify.
  * @param input_length The total length of the input buffer.
  */
-void find_tkn_end(int *start, int *end, int *input_length)
-{
+static void find_tkn_end(int *start, int *end, int *input_length) {
   *end = *start;
-  while (*end < *input_length && buffer[*end] != ' ' && buffer[*end] != '\t')
-  {
-    (*end)++;
+  while (*end < *input_length && !is_space(buffer[*end])) (*end)++;
+}
+
+/**
+ * @brief Add a token from buffer to cmd->argv (up to MAX_ARGS).
+ * @param cmd           Command to update.
+ * @param token_length  Length of token.
+ * @param curr          In: token start index in buffer.
+ */
+static void add_arg(Command *cmd, int token_length, int *curr) {
+  if (token_length <= 0) return;
+  if (cmd->argc < MAX_ARGS) {
+    char *token = alloc((unsigned int)token_length + 1);
+    for (int i = 0; i < token_length; i++) 
+    {
+        token[i] = buffer[*curr + i];
+    }
+    token[token_length] = '\0';
+    cmd->argv[cmd->argc++] = token;
+  } 
+  else {
+    write_str(2, "Too many args\n");
   }
 }
+
+/**
+ * @brief Parse one command (argv) until a special symbol or end of line.
+ * @param cmd           Out: argv/argc.
+ * @param input_index   In/Out: scan position in buffer.
+ * @param input_length  In: total buffer length.
+ */
+static void parse_command(Command *cmd, int *input_index, int *input_length) {
+  cmd->argc = 0;
+
+  int curr = *input_index;
+  int end  = *input_index;
+
+  find_start(&curr, input_length);
+  if (curr >= *input_length) { cmd->argv[0] = NULL; *input_index = curr; return; }
+
+  while (curr < *input_length) {
+    if (is_special(buffer[curr])) { *input_index = curr; break; }
+
+    find_tkn_end(&curr, &end, input_length);
+    add_arg(cmd, end - curr, &curr);
+
+    curr = end;
+    *input_index = curr;
+    find_start(&curr, input_length);
+
+    if (curr < *input_length && is_special(buffer[curr])) { *input_index = curr; break; }
+  }
+
+  cmd->argv[cmd->argc] = NULL;
+  *input_index = curr;
+}
+
+/**
+ * @brief Parse a pipeline: cmd [| cmd] ... and collect '<'/'>' anywhere.
+ * @param job           Out: pipeline stages + infile/outfile.
+ * @param input_index   In/Out: position after the parsed pipeline.
+ */
+static void parse_pipeline(Job *job, int *input_index) {
+  int input_length = mystrlen(buffer);
+  int curr = *input_index;
+
+  Command cmd;
+  parse_command(&cmd, &curr, &input_length);
+  if (cmd.argc > 0) job->pipeline[job->num_stages++] = cmd;
+
+  while(1) {
+    // absorb any redirection here (job-wide)
+    find_start(&curr, &input_length);
+    while (curr < input_length && (buffer[curr] == '<' || buffer[curr] == '>')) {
+      char op = buffer[curr++];
+      find_start(&curr, &input_length);
+      if (curr >= input_length) {
+        write_str(2, (op=='<') ? "syntax error: missing infile after '<'\n"
+                               : "syntax error: missing outfile after '>'\n");
+        *input_index = curr; return;
+      }
+      int end; find_tkn_end(&curr, &end, &input_length);
+      if (end == curr) {
+        write_str(2, (op=='<') ? "syntax error: empty infile\n" : "syntax error: empty outfile\n");
+        *input_index = curr; return;
+      }
+      if (op == '<') job->infile_path  = copy_token_from_buffer(curr, end);
+      else           job->outfile_path = copy_token_from_buffer(curr, end);
+      curr = end;
+      find_start(&curr, &input_length);
+    }
+
+    // next stage?
+    if (curr < input_length && buffer[curr] == '|') {
+      curr++; // skip '|'
+      parse_command(&cmd, &curr, &input_length);
+      if (cmd.argc == 0) {
+        write_str(2, "syntax error: empty command in pipeline\n");
+        *input_index = curr; return;
+      }
+      job->pipeline[job->num_stages++] = cmd;
+      continue;
+    }
+    break;
+  }
+
+  *input_index = curr;
+}
+
+/**
+ * @brief Parse whole job: pipeline (+ redirs) then optional '&'.
+ * @param job           Out: full job.
+ * @param input_index   In/Out: position after job.
+ */
+static void parse_job(Job *job, int *input_index) {
+  int input_length = mystrlen(buffer);
+  parse_pipeline(job, input_index);
+
+  int curr = *input_index;
+  find_start(&curr, &input_length);
+
+  if (curr < input_length) {
+    if (buffer[curr] == '&') {
+      job->is_background = TRUE;
+      curr++;
+      find_start(&curr, &input_length);
+      if (curr < input_length) write_str(2, "warning: text after '&' ignored\n");
+    } else {
+      write_str(2, "syntax error: unexpected token after pipeline/redirection\n");
+    }
+  }
+
+  *input_index = curr;
+}
+
+// Execution
+
+/**
+ * @brief Start one pipeline stage in a child and hook up its stdin/stdout.
+ * @param cmd    Stage command and argv.
+ * @param file_in  file to become stdin (or -1 to keep current).
+ * @param file_out file to become stdout (or -1 to keep current).
+ * @param envp   Environment for execve.
+ * @return Child pid in parent; child does not return on success.
+ */
+pid_t start_child(Command *cmd, int file_in, int file_out, char *envp[]) {
+  pid_t pid = fork();
+  if (pid < 0) {
+    write_str(2, "fork failed\n");
+    return -1;
+  }
+
+  if (pid == 0) {  // child
+    // Hook up stdin (file 0) if requested.
+    if (file_in != -1) {
+      dup2(file_in, 0);
+    }
+
+    // Hook up stdout (file 1) if requested.
+    if (file_out != -1) {
+      dup2(file_out, 1);
+    }
+
+    // These original files are no longer needed in the child.
+    if (file_in > 2)  close(file_in);
+    if (file_out > 2) close(file_out);
+
+    // exec needs argv[] to be NULL-terminated.
+    cmd->argv[cmd->argc] = NULL;
+
+    // Get an absolute path (either a copy of "cmd" if it has '/', or /usr/bin/cmd).
+    char *full_path = resolve_path(cmd->argv[0]);
+    execve(full_path, cmd->argv, envp);
+    
+    write_str(2, "execve failed\n");
+    _exit(127);
+  }
+
+  // parent
+  return pid;
+}
+
+/**
+ * @brief Run the entire job: make pipes, fork stages, set redirs, wait if needed.
+ * @param job   Parsed job with pipeline and flags.
+ * @param envp  Environment for execve.
+ */
+static void run_job(Job *job, char *envp[]) {
+  if (job->num_stages == 0) {
+    return;
+  }
+
+  int in_file  = -1;  // for '<'
+  int out_file = -1;  // for '>'
+
+  // Open redirection files if present.
+  if (job->infile_path != NULL) {
+    in_file = open(job->infile_path, O_RDONLY);
+    if (in_file < 0) {
+      write_str(2, "open infile failed\n");
+    }
+  }
+  if (job->outfile_path != NULL) {
+    out_file = open(job->outfile_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (out_file < 0) {
+      write_str(2, "open outfile failed\n");
+    }
+  }
+
+  pid_t pids[MAX_COMMANDS];
+  int prev_read_file = -1;  // read end of the previous pipe
+  int n = job->num_stages;
+
+  for (int i = 0; i < n; i++) {
+    int pipefile[2];
+    pipefile[0] = -1;
+    pipefile[1] = -1;
+
+    int is_last = 0;
+    if (i == n - 1) {
+      is_last = 1;
+    }
+
+    // If there is a next stage, create a pipe to it.
+    if (!is_last) {
+      if (pipe(pipefile) < 0) {
+        write_str(2, "pipe failed\n");
+        pipefile[0] = -1;
+        pipefile[1] = -1;
+      }
+    }
+
+    // Decide child's stdin.
+    int child_in;
+    if (i == 0) {
+      if (in_file >= 0) {
+        child_in = in_file;     // first stage reads from file if provided
+      } else {
+        child_in = -1;        // otherwise, inherit existing stdin
+      }
+    } else {
+      child_in = prev_read_file; // later stages read from previous pipe
+    }
+
+    // Decide child's stdout.
+    int child_out;
+    if (!is_last) {
+      child_out = pipefile[1];   // write into the new pipe
+    } else {
+      if (out_file >= 0) {
+        child_out = out_file;    // last stage writes to file if provided
+      } else {
+        child_out = -1;        // otherwise, inherit existing stdout
+      }
+    }
+
+    // Start the child for this stage.
+    pids[i] = start_child(&job->pipeline[i], child_in, child_out, envp);
+
+    // Parent no longer needs these ends.
+    if (child_in != -1 && child_in != in_file) {
+      close(child_in);
+    }
+    if (child_out != -1) {
+      close(child_out);
+    }
+
+    // Carry the read end forward for the next stage.
+    if (!is_last) {
+      prev_read_file = pipefile[0];
+    } else {
+      if (prev_read_file != -1) {
+        close(prev_read_file);
+      }
+      prev_read_file = -1;
+    }
+  }
+
+  // Parent: close redirection files (children already have what they need).
+  if (in_file  != -1) close(in_file);
+  if (out_file != -1) close(out_file);
+
+  // If background, don't wait here.
+  if (job->is_background) {
+    return;
+  }
+
+  // Foreground: wait for all children.
+  for (int i = 0; i < n; i++) {
+    if (pids[i] > 0) {
+      int status;
+      waitpid(pids[i], &status, 0);
+    }
+  }
+}
+
+/**
+ * @brief Run a single command (no pipes/redirs). Handy for quick tests.
+ * @param cmd  Parsed command structure (argv/argc).
+ * @param envp Environment passed down from main.
+ 
+static void run_command(Command *cmd, char *envp[]) {
+  if (cmd->argc == 0) return;
+
+  pid_t pid = fork();
+  if (pid < 0) { write_str(2, "fork failed\n"); _exit(1); }
+
+  if (pid == 0) {
+    cmd->argv[cmd->argc] = NULL;
+    char *full_path = resolve_path(cmd->argv[0]);
+    execve(full_path, cmd->argv, envp);
+    write_str(2, "execve failed\n");
+    _exit(127);
+  }
+
+  int status;
+  waitpid(pid, &status, 0);
+}
+ */
+// Builtins / Debug / Reaping
 
 /**
  * @brief Checks for the "exit" command and returns 1 if found, otherwise 0.
@@ -281,168 +536,19 @@ void find_tkn_end(int *start, int *end, int *input_length)
  * @param cmd A pointer to the Command structure to check.
  * @return int Returns 1 if the command is "exit", otherwise returns 0.
  */
-int isExit(const Command *cmd)
-{
-  if (cmd->argc == 1 && mystrlen(cmd->argv[0]) == 4)
-  {
-    if (mystrcmp(cmd->argv[0], "exit") == 0)
-    {
-      return 1;
-    }
-    else if (mystrcmp(cmd->argv[0], "EXIT") == 0)
-    {
-      return 1;
-    }
-    else if (mystrcmp(cmd->argv[0], "Exit") == 0)
-    {
-      return 1;
-    }
+int isExit(const Command *cmd) {
+  if (cmd->argc == 1 && mystrlen(cmd->argv[0]) == 4) {
+    if (mystrcmp(cmd->argv[0], "exit") == 0) return 1;
+    if (mystrcmp(cmd->argv[0], "EXIT") == 0) return 1;
+    if (mystrcmp(cmd->argv[0], "Exit") == 0) return 1;
   }
   return 0;
 }
 
 /**
- * @brief This function prints the contents of a Command structure for
- *        debugging purposes.
- *
- * @param cmd A pointer to the Command structure to print
+ * @brief Reap finished background children without blocking the parent.
  */
-static void print_command(const Command *cmd)
-{
-  for (int i = 0; i < cmd->argc; i++)
-  {
-    printf("argv[%d] = \"%s\"\n", i, cmd->argv[i]);
-  }
-}
-
-/**
- * @brief Execute a command by forking to create a child and running execve.
- *
- * @param cmd  Parsed command structure (argv/argc).
- * @param envp Environment passed down from main.
- */
-void run_command(Command *cmd, char *envp[])
-{
-  char base_path[] = "/usr/bin/";
-
-  if (cmd->argc == 0)
-  {
-    return; // no commands were sent
-  }
-
-  pid_t pid = fork();
-  if (pid < 0)
-  {
-    // error
-    write(2, "fork failed\n", 12);
-    _exit(0);
-  }
-
-  if (pid == 0)
-  {
-    // Child doing some work
-    cmd->argv[cmd->argc] = NULL;                         // ensure argv is NULL-terminated
-    char *full_path = mystrcat(cmd->argv[0], base_path); // appending argument 0 to base path "/user/bin/"
-    execve(full_path, cmd->argv, envp);
-
-    // error
-    write(2, "execve failed\n", 14);
-    _exit(0);
-  }
-  // stop parent from working until the child is gone
-  int status;
-  waitpid(pid, &status, 0);
-}
-
-// CURRENTLY UNUSED FUNCTIONS
-/**
- * @brief This function parses the input buffer into arguments.
- *
- * @param input_length A pointer to an integer representing the length of the input.
- * @param cmd A pointer to a Command structure to store the parsed arguments.
- */
-/**void tokenize(int *input_length, Command *cmd)
-{
-  int start = 0;
-  int end = 0;
-  int token_length;
-  cmd->argc = 0;
-  int *start_ptr = &start;
-  int *end_ptr = &end;
-
-  find_start(start_ptr, input_length);
-
-  // set input_length to 0 if input is all spaces or tabs
-  if (start >= *input_length)
-  {
-    *input_length = 0; // No arguments
-    cmd->argv[0] = NULL;
-    return;
-  }
-
-  // Main tokenizing loop
-  while (start < *input_length)
-  {
-    // find the next space or tab char
-    find_tkn_end(start_ptr, end_ptr, input_length);
-
-    token_length = end - start;
-    add_arg(cmd, token_length, start_ptr);
-    /**if (token_length > 0)
-    {
-      if (cmd->argc < MAX_ARGS)
-      {
-        char *token = alloc(token_length + 1);
-        for (int i = 0; i < token_length; i++)
-        {
-          token[i] = buffer[start + i];
-        }
-        token[token_length] = '\0';
-        cmd->argv[cmd->argc++] = token;
-      }
-      else
-      {
-        write(2, "Too many args\n", 14);
-        break;
-      }
-    }/
-    // Advance past this token
-    start = end;
-
-    while (start < *input_length && (buffer[start] == ' ' || buffer[start] == '\t'))
-    {
-      start++;
-    }
-  }
-
-  cmd->argv[cmd->argc] = NULL;
-
-  return;
-}*/
-
-/**
- * @brief This function checks if the input command is "exit" (case-insensitive).
- *
- * @param buffer A character array containing the user input.
- * @param input_length A pointer to an integer representing the length of the input.
- *
- * @return int Returns 1 if the input is "exit", otherwise returns 0.
-
-int check_exit(char *buffer, int *input_length) {
-  if (*input_length == 4 && (buffer[0] == 'e' || buffer[0] == 'E') &&
-    (buffer[1] == 'x' || buffer[1] == 'X') &&
-    (buffer[2] == 'i' || buffer[2] == 'I') &&
-    (buffer[3] == 't' || buffer[3] == 'T')) {
-    return 1;
-  }
-
-  return 0;
-}
- */
-
- void slay_zombies() {
-    int status, count = 0;
-    pid_t pid;
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-    }
+void slay_zombies() {
+  int status; pid_t pid;
+  while ((pid = waitpid(-1, &status, WNOHANG)) > 0) { pid; status; }
 }
