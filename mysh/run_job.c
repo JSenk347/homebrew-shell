@@ -10,7 +10,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <signal.h>
-
+int g_is_background_job = 0;
 
 /**
  * @brief Run the entire job: make pipes, fork stages, set redirs, wait if needed.
@@ -31,6 +31,7 @@
   int prev_read_file = -1;  // read end of the previous pipe
   int n = job->num_stages;
 
+
   for (int i = 0; i < n; i++) {
     int pipe_fd[2];
     int is_last = (i == n - 1);
@@ -44,17 +45,17 @@
                 &child_in, &child_out);
 
     // Start the child for this stage.
-    pids[i] = start_child(&job->pipeline[i], child_in, child_out, envp);
+    pids[i] = start_child(&job->pipeline[i], child_in, child_out, envp, job->is_background);
     parent_after_fork(child_in, in_fd, child_out, is_last, &prev_read_file, pipe_fd);
   }
 
  close_redirections(in_fd, out_fd);
 
   // If background, don't wait here.
-  if (job->is_background) {return;}
+  if (job->is_background) return;
 
   int soul_reaped = wait_fg_children(pids, n);
-  if (soul_reaped) prompt();
+  if (soul_reaped) write(1, "\n", 1);
 }
 
 /**
@@ -205,4 +206,17 @@ void parent_after_fork(int child_in, int in_fd, int child_out,
       }
       *prev_read_file = -1;
     }                          
+}
+
+void setup_bg_child_group(int is_background) {
+  if (!is_background) return;
+  setpgid(0, 0); 
+}
+
+void setup_bg_process_group(const Job *job, pid_t child_pid, pid_t *pipeline_pgid) {
+  if (!job || !job->is_background) return;
+  if (child_pid <= 0) return;
+
+  if (*pipeline_pgid == 0) *pipeline_pgid = child_pid;
+  setpgid(child_pid, *pipeline_pgid); 
 }
