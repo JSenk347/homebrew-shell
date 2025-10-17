@@ -47,6 +47,7 @@ void find_start(int *start, int *input_length);
 void find_tkn_end(int *start, int *end, int *input_length);
 int isExit(const Command *cmd);
 void run_command(Command *cmd, char *envp[]);
+void run_job(Job *job, char *envp[]);
 // Command get_command(); // WILL BE REPLACED BY GET_JOB()
 pid_t execute_command(Command *cmd, char *envp[], int fd_in, int fd_out);
 // void tokenize(/*char *buffer,*/ int *input_length, Command *cmd); - ARR
@@ -112,8 +113,7 @@ Job get_job()
 }
 
 /**
- * @brief This function prompts the user for input and then reads the input
- *        from the keyboard into the buffer.
+ * @brief This function reads the input from the keyboard into the global buffer.
  *
  * @param input_length A pointer to an integer to store the length of the input
  *        string.
@@ -375,12 +375,6 @@ void find_tkn_end(int *start, int *end, int *input_length)
   }
 }
 
-// JOB EXECUTION FUNCTIONS
-void run_job(Job *job)
-{
-  //@todo
-}
-
 /**
  * @brief Checks for the "exit" command and returns 1 if found, otherwise 0.
  *
@@ -405,20 +399,6 @@ int isExit(const Command *cmd)
     }
   }
   return 0;
-}
-
-/**
- * @brief This function prints the contents of a Command structure for
- *        debugging purposes.
- *
- * @param cmd A pointer to the Command structure to print
- */
-static void print_command(const Command *cmd)
-{
-  for (int i = 0; i < cmd->argc; i++)
-  {
-    printf("argv[%d] = \"%s\"\n", i, cmd->argv[i]);
-  }
 }
 
 /**
