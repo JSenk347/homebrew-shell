@@ -163,21 +163,16 @@ pid_t start_child(Command *cmd, int file_in, int file_out, char *envp[], int is_
       signal(SIGINT,  SIG_DFL);
       signal(SIGQUIT, SIG_DFL);
     }
-    // Hook up stdin (file 0) if requested.
-    if (file_in != -1) dup2(file_in, 0);
-
-    // Hook up stdout (file 1) if requested.
-    if (file_out != -1) dup2(file_out, 1);
-
-    // These original files are no longer needed in the child.
-    if (file_in > 2)  close(file_in);
-    if (file_out > 2) close(file_out);
+ 
+    if (file_in != -1) dup2(file_in, 0); // Hook up stdin (file 0) if requested.
+    if (file_out != -1) dup2(file_out, 1); // Hook up stdout (file 1) if requested.
+    if (file_in > 2)  close(file_in);    // These original files are no longer needed in the child.
+    if (file_out > 2) close(file_out); // These original files are no longer needed in the child.
 
     // exec needs argv[] to be NULL-terminated.
     cmd->argv[cmd->argc] = NULL;
 
-    
-    // Get an absolute path (either a copy of "cmd" if it has '/', or /usr/bin/cmd).
+    // Get an absolute path 
     char *full_path = resolve_path(cmd->argv[0]);
     execve(full_path, cmd->argv, envp);
     write_str(2, "execve failed\n");
