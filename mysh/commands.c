@@ -1,4 +1,5 @@
 #include "mystring.h"
+#include "run_job.h"
 #include "jobs.h"
 #include "myheap.h"
 #include "commands.h"
@@ -8,6 +9,7 @@
 #include <sys/wait.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <signal.h>
 
 /**
  * @brief Add a token from buffer to cmd->argv (up to MAX_ARGS).
@@ -175,6 +177,14 @@ pid_t start_child(Command *cmd, int file_in, int file_out, char *envp[]) {
     // exec needs argv[] to be NULL-terminated.
     cmd->argv[cmd->argc] = NULL;
 
+    if (pid == 0) {
+      // Child should use default handlers so Ctrl-C kills it as usual.
+      signal(SIGINT,  SIG_DFL);
+      signal(SIGQUIT, SIG_DFL);
+
+
+      /* your dup2/close/execve code ... */
+    }
     // Get an absolute path (either a copy of "cmd" if it has '/', or /usr/bin/cmd).
     char *full_path = resolve_path(cmd->argv[0]);
     execve(full_path, cmd->argv, envp);
@@ -186,122 +196,6 @@ pid_t start_child(Command *cmd, int file_in, int file_out, char *envp[]) {
   // parent
   return pid;
 }
-
-/**
- * @brief Run the entire job: make pipes, fork stages, set redirs, wait if needed.
- * @param job   Parsed job with pipeline and flags.
- * @param envp  Environment for execve.
- */
- void run_job(Job *job, char *envp[]) {
-  if (job->num_stages == 0) {
-    return;
-  }
-
-  int in_file  = -1;  // for '<'
-  int out_file = -1;  // for '>'
-
-  // Open redirection files if present.
-  if (job->infile_path != NULL) {
-    in_file = open(job->infile_path, O_RDONLY);
-    if (in_file < 0) {
-      write_str(2, "open infile failed\n");
-    }
-  }
-  if (job->outfile_path != NULL) {
-    out_file = open(job->outfile_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (out_file < 0) {
-      write_str(2, "open outfile failed\n");
-    }
-  }
-
-  pid_t pids[MAX_COMMANDS];
-  int prev_read_file = -1;  // read end of the previous pipe
-  int n = job->num_stages;
-
-  for (int i = 0; i < n; i++) {
-    int pipefile[2];
-    pipefile[0] = -1;
-    pipefile[1] = -1;
-
-    int is_last = 0;
-    if (i == n - 1) {
-      is_last = 1;
-    }
-
-    // If there is a next stage, create a pipe to it.
-    if (!is_last) {
-      if (pipe(pipefile) < 0) {
-        write_str(2, "pipe failed\n");
-        pipefile[0] = -1;
-        pipefile[1] = -1;
-      }
-    }
-
-    // Decide child's stdin.
-    int child_in;
-    if (i == 0) {
-      if (in_file >= 0) {
-        child_in = in_file;     // first stage reads from file if provided
-      } else {
-        child_in = -1;        // otherwise, inherit existing stdin
-      }
-    } else {
-      child_in = prev_read_file; // later stages read from previous pipe
-    }
-
-    // Decide child's stdout.
-    int child_out;
-    if (!is_last) {
-      child_out = pipefile[1];   // write into the new pipe
-    } else {
-      if (out_file >= 0) {
-        child_out = out_file;    // last stage writes to file if provided
-      } else {
-        child_out = -1;        // otherwise, inherit existing stdout
-      }
-    }
-
-    // Start the child for this stage.
-    pids[i] = start_child(&job->pipeline[i], child_in, child_out, envp);
-
-    // Parent no longer needs these ends.
-    if (child_in != -1 && child_in != in_file) {
-      close(child_in);
-    }
-    if (child_out != -1) {
-      close(child_out);
-    }
-
-    // Carry the read end forward for the next stage.
-    if (!is_last) {
-      prev_read_file = pipefile[0];
-    } else {
-      if (prev_read_file != -1) {
-        close(prev_read_file);
-      }
-      prev_read_file = -1;
-    }
-  }
-
-  // Parent: close redirection files (children already have what they need).
-  if (in_file  != -1) close(in_file);
-  if (out_file != -1) close(out_file);
-
-  // If background, don't wait here.
-  if (job->is_background) {
-    return;
-  }
-
-  // Foreground: wait for all children.
-  for (int i = 0; i < n; i++) {
-    if (pids[i] > 0) {
-      int status;
-      waitpid(pids[i], &status, 0);
-    }
-  }
-}
-
-
 
 /**
  * @brief Copy text [start, end) from the global buffer.
@@ -341,3 +235,70 @@ pid_t start_child(Command *cmd, int file_in, int file_out, char *envp[]) {
   mystrcat(cmd, dst);
   return dst;
 }
+
+/**
+ * @brief Read one line from stdin into buffer (no newline kept).
+ * @param input_length  Out: number of chars stored (no NUL).
+ */
+ void read_input(int *input_length) {
+  char c; int i = 0;
+  int n = read(0, &c, 1);
+  while (n > 0 && c != '\n' && i < MAX_CHAR - 1) {
+    buffer[i++] = c;
+    n = read(0, &c, 1);
+  }
+  buffer[i] = '\0';
+  *input_length = i;
+}
+
+/**
+ * @brief Skip over initial white space until a non-white space char is found.
+ *
+ * @param start Pointer to the starting index to modify.
+ * @param input_length The total length of the input buffer.
+ */
+ void find_start(int *start, int *input_length) {
+  while (*start < *input_length && is_space(buffer[*start])) (*start)++;
+}
+
+/**
+ * @brief Find the end index of the current token by searching for the next
+ *        white space character or the end of the input.
+ *
+ * @param start Pointer to the starting index of the token.
+ * @param end Pointer to the ending index of the token to modify.
+ * @param input_length The total length of the input buffer.
+ */
+ void find_tkn_end(int *start, int *end, int *input_length) {
+  *end = *start;
+  while (*end < *input_length && !is_space(buffer[*end])) (*end)++;
+}
+
+// BABY HELPERS
+/**
+ * @brief Write a C string to a file descriptor.
+ * @param file  Destination file descriptor.
+ * @param s   NUL-terminated string.
+ */
+void write_str(int file, const char *s) {
+  write(file, s, (unsigned int)mystrlen(s));
+}
+
+/**
+ * @brief Check if a char is space or tab.
+ * @param c   Character.
+ * @return non-zero if space or tab, else 0.
+ */
+int is_space(char c) { return c==' ' || c=='\t'; }
+
+/**
+ * @brief Check if a char is one of | < > &.
+ * @param c   Character.
+ * @return non-zero if special, else 0.
+ */
+int is_special(char c) { return c=='|' || c=='<' || c=='>' || c=='&'; }
+
+/** 
+* @brief Prompts the user with 
+*/
+void prompt(){ write(1, "(^-^): ", 7); }
