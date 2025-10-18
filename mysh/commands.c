@@ -197,36 +197,33 @@ void parse_job(Job *job, int *input_index)
  * @param envp   Environment for execve.
  * @return Child pid in parent; child does not return on success.
  */
-pid_t start_child(Command *cmd, int file_in, int file_out, char *envp[])
-{
+pid_t start_child(Command *cmd, int file_in, int file_out, char *envp[], int is_background) {
   pid_t pid = fork();
   if (pid < 0)
   {
     write_str(2, "fork failed\n");
     return -1;
   }
-
-  if (pid == 0) // Child tings
-  {
+  if (pid == 0) {  // child
+    if (!is_background) {      
+      signal(SIGINT,  SIG_DFL);
+      signal(SIGQUIT, SIG_DFL);
+    }
+ 
     if (file_in != -1) dup2(file_in, 0); // Hook up stdin (file 0) if requested.
     if (file_out != -1) dup2(file_out, 1); // Hook up stdout (file 1) if requested.
-    if (file_in > 2) close(file_in); // These original files are no longer needed in the child.
-    if (file_out > 2) close(file_out);
+    if (file_in > 2)  close(file_in);    // These original files are no longer needed in the child.
+    if (file_out > 2) close(file_out); // These original files are no longer needed in the child.
 
-    cmd->argv[cmd->argc] = NULL; // exec needs argv[] to be NULL-terminated.
+    // exec needs argv[] to be NULL-terminated.
+    cmd->argv[cmd->argc] = NULL;
 
-    signal(SIGINT, SIG_DFL); // Child should use default handlers so Ctrl-C kills it as usual.
-    signal(SIGQUIT, SIG_DFL);
-
-    // Get an absolute path (either a copy of "cmd" if it has '/', or /usr/bin/cmd).
+    // Get an absolute path 
     char *full_path = resolve_path(cmd->argv[0]);
     execve(full_path, cmd->argv, envp);
-
     write_str(2, "execve failed\n");
     _exit(127);
   }
-
-  // Parent tings
   return pid;
 }
 

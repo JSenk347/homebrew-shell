@@ -35,6 +35,7 @@ void run_job(Job *job, char *envp[]) {
   int prev_read_file = -1;  // read end of the previous pipe
   int n = job->num_stages;
 
+
   for (int i = 0; i < n; i++) {
     int pipe_fd[2];
     int is_last = (i == n - 1);
@@ -48,7 +49,7 @@ void run_job(Job *job, char *envp[]) {
               &child_in, &child_out);
 
     // Start the child for this stage.
-    pids[i] = start_child(&job->pipeline[i], child_in, child_out, envp);
+    pids[i] = start_child(&job->pipeline[i], child_in, child_out, envp, job->is_background);
     parent_after_fork(child_in, in_fd, child_out, is_last, &prev_read_file, pipe_fd);
   }
 
@@ -58,7 +59,7 @@ void run_job(Job *job, char *envp[]) {
   if (job->is_background) return;
 
   int soul_reaped = wait_fg_children(pids, n);
-  if (soul_reaped) prompt();
+  if (soul_reaped) write(1, "\n", 1);
 }
 
 /**
@@ -187,13 +188,29 @@ void child_io(int i, int n, int in_fd, int out_fd,
 */
 void parent_after_fork(int child_in, int in_fd, int child_out,
                             int is_last, int *prev_read_file, int pipe_fd[2]) {
-  // Parent no longer needs these ends.                            
-  if (child_in != -1 && child_in != in_fd) close(child_in);
-  if (child_out != -1) close(child_out);
-  // Carry the read end forward for the next stage.
-  if (!is_last) { *prev_read_file = pipe_fd[0]; } 
-  else {
-    if (*prev_read_file != -1) close(*prev_read_file);
-    *prev_read_file = -1;
-  }                          
+    // Parent no longer needs these ends.                            
+    if (child_in != -1 && child_in != in_fd) close(child_in);
+    if (child_out != -1) close(child_out);
+    // Carry the read end forward for the next stage.
+    if (!is_last) {
+      *prev_read_file = pipe_fd[0];
+    } else {
+      if (*prev_read_file != -1) {
+        close(*prev_read_file);
+      }
+      *prev_read_file = -1;
+    }                          
+}
+
+void setup_bg_child_group(int is_background) {
+  if (!is_background) return;
+  setpgid(0, 0); 
+}
+
+void setup_bg_process_group(const Job *job, pid_t child_pid, pid_t *pipeline_pgid) {
+  if (!job || !job->is_background) return;
+  if (child_pid <= 0) return;
+
+  if (*pipeline_pgid == 0) *pipeline_pgid = child_pid;
+  setpgid(child_pid, *pipeline_pgid); 
 }
