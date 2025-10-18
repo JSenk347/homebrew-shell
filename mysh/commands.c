@@ -194,10 +194,18 @@ void parse_job(Job *job, int *input_index)
  * @param cmd    Stage command and argv.
  * @param file_in  file to become stdin (or -1 to keep current).
  * @param file_out file to become stdout (or -1 to keep current).
+ * @param curr_pipe_read   Read end of the pipe created for this stage. 
+ * @param curr_pipe_write  Write end of the pipe created for this stage.
+ * @param prev_read_file   Read end of the previous stage's pipe. 
  * @param envp   Environment for execve.
+ * @param is_background    Non-zero if the job runs in background.
+ *
  * @return Child pid in parent; child does not return on success.
  */
-pid_t start_child(Command *cmd, int file_in, int file_out, char *envp[], int is_background) {
+pid_t start_child(Command *cmd, int file_in, int file_out,
+                  int curr_pipe_read, int curr_pipe_write,
+                  int prev_read_file,
+                  char *envp[], int is_background){
   pid_t pid = fork();
   if (pid < 0)
   {
@@ -209,13 +217,23 @@ pid_t start_child(Command *cmd, int file_in, int file_out, char *envp[], int is_
       signal(SIGINT,  SIG_DFL);
       signal(SIGQUIT, SIG_DFL);
     }
- 
-    if (file_in != -1) dup2(file_in, 0); // Hook up stdin (file 0) if requested.
-    if (file_out != -1) dup2(file_out, 1); // Hook up stdout (file 1) if requested.
+    if (file_in  != -1 && dup2(file_in,  0) == -1) { 
+      write_str(2, "dup2 stdin failed\n");
+      _exit(127);
+    }
+    if (file_out != -1 && dup2(file_out, 1) == -1) { 
+      write_str(2, "dup2 stdout failed\n");
+      _exit(127);
+    }
+
     if (file_in > 2)  close(file_in);    // These original files are no longer needed in the child.
     if (file_out > 2) close(file_out); // These original files are no longer needed in the child.
-
-    // exec needs argv[] to be NULL-terminated.
+    // closes unused pipe ends
+    if (curr_pipe_read  != -1 && curr_pipe_read  != 0 && curr_pipe_read  != 1) close(curr_pipe_read);
+    if (curr_pipe_write != -1 && curr_pipe_write != 0 && curr_pipe_write != 1
+        && curr_pipe_write != file_out) close(curr_pipe_write);
+    if (prev_read_file  >  2 && prev_read_file != file_in) close(prev_read_file);
+  
     cmd->argv[cmd->argc] = NULL;
 
     // Get an absolute path 

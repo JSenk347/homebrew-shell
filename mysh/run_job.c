@@ -49,7 +49,11 @@ void run_job(Job *job, char *envp[]) {
               &child_in, &child_out);
 
     // Start the child for this stage.
-    pids[i] = start_child(&job->pipeline[i], child_in, child_out, envp, job->is_background);
+    pids[i] = start_child(&job->pipeline[i],
+                          child_in, child_out,
+                          pipe_fd[0], pipe_fd[1],
+                          prev_read_file,
+                          envp, job->is_background);
     parent_after_fork(child_in, in_fd, child_out, is_last, &prev_read_file, pipe_fd);
   }
 
@@ -66,8 +70,8 @@ void run_job(Job *job, char *envp[]) {
 * @brief Opens the in and out files specified by filepath in the
 *        Job structure, assigning the fd's to the in_fd and out_fd
 * @param job    The job that is being worked on
-* @param in_fd  Input file descriptor
-* @param out_fd Output file descriptor   
+* @param in_fd  Out: input file descriptor for '<' or -1 if none/failed.
+* @param out_fd Out: output file descriptor for '>' or -1 if none/failed. 
 */
 void open_redirections(const Job *job, int *in_fd, int *out_fd) {
     int fd;
@@ -80,16 +84,16 @@ void open_redirections(const Job *job, int *in_fd, int *out_fd) {
     else *in_fd = fd;
   }
   if (job->outfile_path != NULL) {
-    fd = open(job->outfile_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (out_fd < 0) write_str(2, "open outfile failed\n"); 
+    fd = open(job->outfile_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd < 0) write_str(2, "open outfile failed\n"); 
     else *out_fd = fd;
   }
 }
 
 /**
-* @brief Closes in and out files
-* @param in_fd  The input file descriptor
-* @param out_fd The output file descriptor
+* @brief Close any opened redirection file descriptors.
+* @param in_fd   Input FD or -1 if none.
+* @param out_fd  Output FD or -1 if none.
 */
 void close_redirections(int in_fd, int out_fd) {
   if (in_fd != -1) close(in_fd);
@@ -168,23 +172,20 @@ void child_io(int i, int n, int in_fd, int out_fd,
     // stdout
     if (!last) { *child_out = pipe_fd[1]; } 
     else {
-        if(out_fd >= 0) {
-            *child_out = out_fd;
-        } else {
-            *child_out = -1;
-        }
+        if(out_fd >= 0) {*child_out = out_fd;} 
+        else {*child_out = -1;}
     }
 }
 
 /**
-* @brief Parent cleaning up after spawning one stage (foreground), closes the parent's copies of the child_in 
-* and child_out file descriptors, if necessary it will carry pip_fd[0] forward to the next stage as prev_read_file.
+* @brief Parent cleaning up after forking one stage, carry pipe read-ends forward
+*
 * @param child_in    FD for child's stdin
-* @param in_fd       '<' jobs FD 
+* @param in_fd       Job-wide '<' FD
 * @param child_out   FD for child's stdout
 * @param is_last     Whether this is the last stage in the pipeline
-* @param prev_read_file FD for the read end of the previous pipe
-* @param pipe_fd     Array containing the pipe file descriptors
+* @param prev_read_file Previous pipes read end
+* @param pipe_fd     Current pipe FDs: [read_fd, write_fd] or [-1, -1] if last.
 */
 void parent_after_fork(int child_in, int in_fd, int child_out,
                             int is_last, int *prev_read_file, int pipe_fd[2]) {
@@ -202,15 +203,3 @@ void parent_after_fork(int child_in, int in_fd, int child_out,
     }                          
 }
 
-void setup_bg_child_group(int is_background) {
-  if (!is_background) return;
-  setpgid(0, 0); 
-}
-
-void setup_bg_process_group(const Job *job, pid_t child_pid, pid_t *pipeline_pgid) {
-  if (!job || !job->is_background) return;
-  if (child_pid <= 0) return;
-
-  if (*pipeline_pgid == 0) *pipeline_pgid = child_pid;
-  setpgid(child_pid, *pipeline_pgid); 
-}

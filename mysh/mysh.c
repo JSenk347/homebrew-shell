@@ -82,20 +82,18 @@ int isExit(const Command *cmd) {
 }
 
 /**
-* @brief @todo by joseeeeeeeeph
-*
-*/
+ * @brief Initialize the shell's signal handling.
+ */
 void setup_signals() {
   struct sigaction ign;
   sigemptyset(&ign.sa_mask);
   ign.sa_handler = SIG_IGN;
 #ifdef SA_RESTART
-  ign.sa_flags = SA_RESTART;   // auto-restart read()/waitpid() etc. if interrupted
+  ign.sa_flags = SA_RESTART;   
 #endif
   sigaction(SIGINT,  &ign, NULL);   // ignore Ctrl-C in the shell
   sigaction(SIGQUIT, &ign, NULL);   // ignore Ctrl-\ in the shell
 
-  // OPTION A (recommended): reap background children as soon as they exit
   struct sigaction chld;
   sigemptyset(&chld.sa_mask);
   chld.sa_handler = soul_reaper;
@@ -108,7 +106,7 @@ void setup_signals() {
 /**
 * @brief Reap finished background children without blocking the parent.
 */
-void soul_reaper() {
+void soul_reaper(int sig) {
   int status;
   while (waitpid(-1, &status, WNOHANG) > 0);
 }
