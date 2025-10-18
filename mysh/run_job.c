@@ -136,15 +136,15 @@ int wait_fg_children(pid_t pids[], int n) {
 *                   or not        
 */
 int set_pipe(int is_last, int pipe_fd[2]) {
-    pipe_fd[0] = -1;
-    pipe_fd[1] = -1;
-    if (!is_last) {
-      if (pipe(pipe_fd) < 0) {
-        write_str(2, "pipe failed\n");
-        return -1;
-      }
+  pipe_fd[0] = -1;
+  pipe_fd[1] = -1;
+  if (!is_last) {
+    if (pipe(pipe_fd) < 0) {
+      write_str(2, "pipe failed\n");
+      return -1;
     }
-    return 0;
+  }
+  return 0;
 }
 
 /**
@@ -189,17 +189,14 @@ void child_io(int i, int n, int in_fd, int out_fd,
 */
 void parent_after_fork(int child_in, int in_fd, int child_out,
                             int is_last, int *prev_read_file, int pipe_fd[2]) {
-    // Parent no longer needs these ends.                            
-    if (child_in != -1 && child_in != in_fd) close(child_in);
-    if (child_out != -1) close(child_out);
-    // Carry the read end forward for the next stage.
-    if (!is_last) {
-      *prev_read_file = pipe_fd[0];
-    } else {
-      if (*prev_read_file != -1) {
-        close(*prev_read_file);
-      }
-      *prev_read_file = -1;
-    }                          
+  // Parent no longer needs these ends.                            
+  if (child_in != -1 && child_in != in_fd) close(child_in);
+  if (child_out != -1) close(child_out);
+  // Carry the read end forward for the next stage.
+  if (!is_last) { *prev_read_file = pipe_fd[0]; }
+  else {
+    if (*prev_read_file != -1) close(*prev_read_file);
+    *prev_read_file = -1;
+  }                          
 }
 

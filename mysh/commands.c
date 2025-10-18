@@ -274,8 +274,7 @@ char *resolve_path(const char *cmd)
     {
       unsigned int L = mystrlen(cmd);
       char *p = alloc(L + 1);
-      for (unsigned int j = 0; j < L; j++)
-        p[j] = cmd[j];
+      for (unsigned int j = 0; j < L; j++) {p[j] = cmd[j];}
       p[L] = '\0';
       return p;
     }
@@ -330,8 +329,7 @@ void find_start(int *start, int *input_length)
 void find_tkn_end(int *start, int *end, int *input_length)
 {
   *end = *start;
-  while (*end < *input_length && !is_space(buffer[*end]))
-    (*end)++;
+  while (*end < *input_length && !is_space(buffer[*end])) {(*end)++;}
 }
 
 // BABY HELPERS

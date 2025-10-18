@@ -28,7 +28,7 @@ static char *freep = heap; //Ptr to next available chunk of memory on the heap
 char *alloc(unsigned int size)
 {
   if (size == 0 || freep + size > heap + HEAP_SIZE){
-    write(1, &HEAP_OVERFLOW_ERR, sizeof(HEAP_OVERFLOW_ERR)-1);
+    write(1, &HEAP_OVERFLOW_ERR, sizeof(HEAP_OVERFLOW_ERR) - 1);
     _exit(0);
   }
 
