@@ -1,9 +1,7 @@
-// path: src/mysh.c
 /**
- * Summary: Simple shell (mysh) that supports pipes (|), redirection (<, >),
- *          and background (&).
- *
- * Command format (simple rules):
+ * Summary: Simple shell (mysh) "main" file that supports n-stage pipes (|), 
+ *          redirection (<, >), and background (&) processes.
+ * @attention Command format (simple rules):
  *   cmd args... [ '|' cmd args... ]... [ '<' infile ] [ '>' outfile ] [ '&' ]
  * - Words are split by spaces or tabs.
  * - Special symbols | < > & must have spaces around them.
@@ -11,8 +9,10 @@
  * - '&' must be last.
  *
  * Memory: uses myheap. We reset it BEFORE parsing a line and AFTER running it.
- *
- * Authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
+ * 
+ * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
+ * 
+ * @file mysh.c
  */
 #define _POSIX_C_SOURCE 200809L   
 #include "mysh.h"
@@ -23,15 +23,10 @@
 #include "run_job.h"
 #include <signal.h>
 
-
-// Global
-char buffer[MAX_CHAR];  // input buffer
+char buffer[MAX_CHAR]; // input buffer
 
 int isExit(const Command *cmd);
 Job get_job();
-
-
-// Main
 
 int main(int argc, char *argv[], char *envp[]) {
   setup_signals();
@@ -53,7 +48,6 @@ int main(int argc, char *argv[], char *envp[]) {
  * @return Job A Job structure to store the parsed job.
  */
 Job get_job() {
-  //soul_reaper();             // slay those pesky zombies
   prompt();
 
   int input_length = 0;
@@ -88,8 +82,7 @@ int isExit(const Command *cmd) {
 }
 
 /**
-* @brief 
-*
+* @brief @todo by joseeeeeeeeph
 *
 */
 void setup_signals() {
@@ -115,8 +108,7 @@ void setup_signals() {
 /**
 * @brief Reap finished background children without blocking the parent.
 */
-void soul_reaper(int sig) {
+void soul_reaper() {
   int status;
-  // Reap any exited children without blocking.
   while (waitpid(-1, &status, WNOHANG) > 0);
 }

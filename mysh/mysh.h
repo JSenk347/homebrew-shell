@@ -1,4 +1,3 @@
-
 #ifndef MYSH_H
 #define MYSH_H
 
@@ -41,5 +40,5 @@ extern char buffer[MAX_CHAR];
 int  isExit(const Command *cmd);
 Job  get_job();
 void setup_signals();
-void soul_reaper(int sig);
+void soul_reaper();
 #endif
