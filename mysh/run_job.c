@@ -132,15 +132,15 @@ int wait_fg_children(pid_t pids[], int n) {
 *                   or not        
 */
 int set_pipe(int is_last, int pipe_fd[2]) {
-    pipe_fd[0] = -1;
-    pipe_fd[1] = -1;
-    if (!is_last) {
-      if (pipe(pipe_fd) < 0) {
-        write_str(2, "pipe failed\n");
-        return -1;
-      }
+  pipe_fd[0] = -1;
+  pipe_fd[1] = -1;
+  if (!is_last) {
+    if (pipe(pipe_fd) < 0) {
+      write_str(2, "pipe failed\n");
+      return -1;
     }
-    return 0;
+  }
+  return 0;
 }
 
 /**
@@ -156,24 +156,21 @@ int set_pipe(int is_last, int pipe_fd[2]) {
 void child_io(int i, int n, int in_fd, int out_fd,
                 int prev_read_file, int pipe_fd[2],
                 int *child_in, int *child_out) {
-    int first = (i == 0);
-    int last = (i == n - 1);
-    // stdin
-    if (first) {
-        if(in_fd >= 0) { *child_in = in_fd; } 
-        else { *child_in = -1; }
-    } else {
-        *child_in = prev_read_file; 
-    }
-    // stdout
-    if (!last) { *child_out = pipe_fd[1]; } 
-    else {
-        if(out_fd >= 0) {
-            *child_out = out_fd;
-        } else {
-            *child_out = -1;
-        }
-    }
+  int first = (i == 0);
+  int last = (i == n - 1);
+  // stdin
+  if (first) {
+    if(in_fd >= 0) { *child_in = in_fd; } 
+    else { *child_in = -1; }
+  } else {
+    *child_in = prev_read_file; 
+  }
+  // stdout
+  if (!last) { *child_out = pipe_fd[1]; } 
+  else {
+    if(out_fd >= 0) {*child_out = out_fd;} 
+    else {*child_out = -1;}
+  }
 }
 
 /**
@@ -188,18 +185,15 @@ void child_io(int i, int n, int in_fd, int out_fd,
 */
 void parent_after_fork(int child_in, int in_fd, int child_out,
                             int is_last, int *prev_read_file, int pipe_fd[2]) {
-    // Parent no longer needs these ends.                            
-    if (child_in != -1 && child_in != in_fd) close(child_in);
-    if (child_out != -1) close(child_out);
-    // Carry the read end forward for the next stage.
-    if (!is_last) {
-      *prev_read_file = pipe_fd[0];
-    } else {
-      if (*prev_read_file != -1) {
-        close(*prev_read_file);
-      }
-      *prev_read_file = -1;
-    }                          
+  // Parent no longer needs these ends.                            
+  if (child_in != -1 && child_in != in_fd) close(child_in);
+  if (child_out != -1) close(child_out);
+  // Carry the read end forward for the next stage.
+  if (!is_last) { *prev_read_file = pipe_fd[0]; }
+  else {
+    if (*prev_read_file != -1) close(*prev_read_file);
+    *prev_read_file = -1;
+  }                          
 }
 
 void setup_bg_child_group(int is_background) {
@@ -211,6 +205,6 @@ void setup_bg_process_group(const Job *job, pid_t child_pid, pid_t *pipeline_pgi
   if (!job || !job->is_background) return;
   if (child_pid <= 0) return;
 
-  if (*pipeline_pgid == 0) *pipeline_pgid = child_pid;
+  if (*pipeline_pgid == 0) {*pipeline_pgid = child_pid;}
   setpgid(child_pid, *pipeline_pgid); 
 }
