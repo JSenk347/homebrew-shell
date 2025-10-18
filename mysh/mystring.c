@@ -1,18 +1,12 @@
 /**
- * Summary: Contains string manipulation functions.
- * 
- * Current functionality: Implements custom versions of strlen, strcmp, and
- *    strcpy.
+ * Summary: Contains string manipulation functions. Implements custom versions of strlen,
+ *          strcmp, and strcpy.
  * 
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
+ * 
  * @file: mystring.c
  */
-
 #include "mystring.h"
-
-
-// #include <string.h>
-// #include <stdio.h>
 
 /**
 * @brief computes and returns the length of a NULL TERMINATED string.
@@ -77,9 +71,7 @@ char *mystrcpy(const char *src, char *dest)
 char *mystrcat(const char *src, char *dest){
   char *original_dest = dest;
 
-  while (*dest != '\0') {
-    dest++;
-  }
+  while (*dest != '\0') dest++;
 
   while (*src != '\0') {
     *dest = *src;

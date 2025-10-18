@@ -1,10 +1,3 @@
-/**
- * Summary: @todo
- * 
- * @authors Anna Running Rabbit, Joseph Mills, Jordan Senko
- * @file commands.h
- */
-
 #ifndef COMMANDS_H
 #define COMMANDS_H
 #include <sys/types.h>

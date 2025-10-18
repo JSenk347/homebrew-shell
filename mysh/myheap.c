@@ -5,9 +5,9 @@
  *    free_all functions.
  * 
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
+ * 
  * @file: myheap.c
  */
-
 #include <unistd.h>
 #include <stdio.h>
 #include "myheap.h"
@@ -38,7 +38,8 @@ char *alloc(unsigned int size)
 }
 
 /**
- * @brief @todo
+ * @brief Frees the heap by pointing to freep
+ *        pointer to the front of the array
  */
 void free_all()
 {

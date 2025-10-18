@@ -1,3 +1,10 @@
+/**
+ * Summary: File comprised of run_job and its helper functions. Run jobs is a beast.
+ *
+ * @authors Anna Running Rabbit, Joseph Mills, Jordan Senko
+ * 
+ * @file run_job.c
+ */
 #include "run_job.h"
 #include "mystring.h"
 #include "jobs.h"
@@ -11,16 +18,13 @@
 #include <fcntl.h>
 #include <signal.h>
 
-
 /**
  * @brief Run the entire job: make pipes, fork stages, set redirs, wait if needed.
  * @param job   Parsed job with pipeline and flags.
  * @param envp  Environment for execve.
  */
- void run_job(Job *job, char *envp[]) {
-  if (job->num_stages == 0) {
-    return;
-  }
+void run_job(Job *job, char *envp[]) {
+  if (job->num_stages == 0) return;
 
   int in_fd;  // for '<'  
   int out_fd;  // for '>'
@@ -40,18 +44,18 @@
     int child_in, child_out;
    
     child_io(i, n, in_fd, out_fd,
-                prev_read_file, pipe_fd,
-                &child_in, &child_out);
+              prev_read_file, pipe_fd,
+              &child_in, &child_out);
 
     // Start the child for this stage.
     pids[i] = start_child(&job->pipeline[i], child_in, child_out, envp);
     parent_after_fork(child_in, in_fd, child_out, is_last, &prev_read_file, pipe_fd);
   }
 
- close_redirections(in_fd, out_fd);
+  close_redirections(in_fd, out_fd);
 
   // If background, don't wait here.
-  if (job->is_background) {return;}
+  if (job->is_background) return;
 
   int soul_reaped = wait_fg_children(pids, n);
   if (soul_reaped) prompt();
@@ -71,19 +75,13 @@ void open_redirections(const Job *job, int *in_fd, int *out_fd) {
     // Open redirection files if present.
   if (job->infile_path != NULL) {
     fd = open(job->infile_path, O_RDONLY);
-    if (fd < 0) {
-      write_str(2, "open infile failed\n");
-    } else {
-      *in_fd = fd;
-    }
+    if (fd < 0) write_str(2, "open infile failed\n");
+    else *in_fd = fd;
   }
   if (job->outfile_path != NULL) {
     fd = open(job->outfile_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (out_fd < 0) {
-      write_str(2, "open outfile failed\n");
-    } else {
-      *out_fd = fd;
-    }
+    if (out_fd < 0) write_str(2, "open outfile failed\n"); 
+    else *out_fd = fd;
   }
 }
 
@@ -160,19 +158,15 @@ void child_io(int i, int n, int in_fd, int out_fd,
     int first = (i == 0);
     int last = (i == n - 1);
     // stdin
-    if(first){
-        if(in_fd >= 0) {
-            *child_in = in_fd;
-        } else {
-            *child_in = -1; 
-        }
+    if (first) {
+        if(in_fd >= 0) { *child_in = in_fd; } 
+        else { *child_in = -1; }
     } else {
         *child_in = prev_read_file; 
     }
     // stdout
-    if(!last){
-        *child_out = pipe_fd[1];
-    } else {
+    if (!last) { *child_out = pipe_fd[1]; } 
+    else {
         if(out_fd >= 0) {
             *child_out = out_fd;
         } else {
@@ -193,16 +187,13 @@ void child_io(int i, int n, int in_fd, int out_fd,
 */
 void parent_after_fork(int child_in, int in_fd, int child_out,
                             int is_last, int *prev_read_file, int pipe_fd[2]) {
-    // Parent no longer needs these ends.                            
-    if (child_in != -1 && child_in != in_fd) close(child_in);
-    if (child_out != -1) close(child_out);
-    // Carry the read end forward for the next stage.
-    if (!is_last) {
-      *prev_read_file = pipe_fd[0];
-    } else {
-      if (*prev_read_file != -1) {
-        close(*prev_read_file);
-      }
-      *prev_read_file = -1;
-    }                          
+  // Parent no longer needs these ends.                            
+  if (child_in != -1 && child_in != in_fd) close(child_in);
+  if (child_out != -1) close(child_out);
+  // Carry the read end forward for the next stage.
+  if (!is_last) { *prev_read_file = pipe_fd[0]; } 
+  else {
+    if (*prev_read_file != -1) close(*prev_read_file);
+    *prev_read_file = -1;
+  }                          
 }
