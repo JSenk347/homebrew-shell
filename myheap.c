@@ -5,17 +5,17 @@
  *    free_all functions.
  * 
  * @authors: Anna Running Rabbit, Joseph Mills, Jordan Senko
+ * 
  * @file: myheap.c
  */
-
 #include <unistd.h>
 #include <stdio.h>
 #include "myheap.h"
 
-#define HEAP_SIZE 10000     /* adjust as necessary */
-#define HEAP_OVERFLOW_ERR "You have run out of available space on the heap bitch!!!\n"
+#define HEAP_SIZE 10000     
+#define HEAP_OVERFLOW_ERR "You have run out of available space on the heap\n"
 
-static char heap[HEAP_SIZE]; //Big 'Ol heap
+static char heap[HEAP_SIZE]; //Big Ol' heap
 static char *freep = heap; //Ptr to next available chunk of memory on the heap
 
 /**
@@ -28,7 +28,7 @@ static char *freep = heap; //Ptr to next available chunk of memory on the heap
 char *alloc(unsigned int size)
 {
   if (size == 0 || freep + size > heap + HEAP_SIZE){
-    write(1, &HEAP_OVERFLOW_ERR, 57);
+    write(1, &HEAP_OVERFLOW_ERR, sizeof(HEAP_OVERFLOW_ERR) - 1);
     _exit(0);
   }
 
@@ -38,7 +38,8 @@ char *alloc(unsigned int size)
 }
 
 /**
- * @brief @todo
+ * @brief Frees the heap by pointing to freep
+ *        pointer to the front of the array
  */
 void free_all()
 {
